@@ -1,0 +1,269 @@
+// Prisma schema matching standard Neon PostgreSQL tables
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  ADMIN
+  STUDENT
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+model User {
+  id              Int                   @id @default(autoincrement())
+  name            String
+  email           String                @unique
+  passwordHash    String                @map("password_hash")
+  role            Role                  @default(STUDENT)
+  avatarUrl       String?               @map("avatar_url")
+  learningStreak  Int                   @default(0) @map("learning_streak")
+  lastActiveAt    DateTime              @default(now()) @map("last_active_at")
+  createdAt       DateTime              @default(now()) @map("created_at")
+  isVerified      Boolean               @default(false) @map("is_verified")
+  enrollments     Enrollment[]
+  lessonProgress  LessonProgress[]
+  bookmarks       PdfBookmark[]
+  attempts        QuizAttempt[]
+  submissions     ChallengeSubmission[]
+  certificates    Certificate[]
+  posts           CommunityPost[]
+  comments        CommunityComment[]
+  likes           PostLike[]
+
+  @@map("users")
+}
+
+model Course {
+  id           Int            @id @default(autoincrement())
+  title        String
+  description  String
+  thumbnailUrl String?        @map("thumbnail_url")
+  price        Decimal        @default(0.00)
+  isPremium    Boolean        @default(false) @map("is_premium")
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @default(now()) @updatedAt @map("updated_at")
+  modules      Module[]
+  enrollments  Enrollment[]
+  quizzes      Quiz[]
+  certificates Certificate[]
+
+  @@map("courses")
+}
+
+model Module {
+  id        Int      @id @default(autoincrement())
+  courseId  Int      @map("course_id")
+  title     String
+  sortOrder Int      @default(0) @map("sort_order")
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons   Lesson[]
+
+  @@map("modules")
+}
+
+model Lesson {
+  id                Int              @id @default(autoincrement())
+  moduleId          Int              @map("module_id")
+  title             String
+  content           String?
+  videoUrl          String?          @map("video_url")
+  durationMinutes   Int              @default(0) @map("duration_minutes")
+  sortOrder         Int              @default(0) @map("sort_order")
+  isPreviewAllowed  Boolean          @default(false) @map("is_preview_allowed")
+  module            Module           @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  progress          LessonProgress[]
+
+  @@map("lessons")
+}
+
+model Enrollment {
+  id         Int      @id @default(autoincrement())
+  userId     Int      @map("user_id")
+  courseId   Int      @map("course_id")
+  enrolledAt DateTime @default(now()) @map("enrolled_at")
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course     Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+  @@map("enrollments")
+}
+
+model LessonProgress {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @map("user_id")
+  lessonId    Int      @map("lesson_id")
+  completedAt DateTime @default(now()) @map("completed_at")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson      Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lessonId])
+  @@map("lesson_progress")
+}
+
+model Tutorial {
+  id           Int      @id @default(autoincrement())
+  title        String
+  category     String
+  content      String
+  codeSnippet  String?  @map("code_snippet")
+  languageSlug String   @default("javascript") @map("language_slug")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("tutorials")
+}
+
+model Pdf {
+  id        Int           @id @default(autoincrement())
+  title     String
+  author    String?
+  category  String
+  fileUrl   String        @map("file_url")
+  previewUrl String?      @map("preview_url")
+  isPremium Boolean       @default(false) @map("is_premium")
+  createdAt DateTime      @default(now()) @map("created_at")
+  bookmarks PdfBookmark[]
+
+  @@map("pdfs")
+}
+
+model PdfBookmark {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  pdfId     Int      @map("pdf_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pdf       Pdf      @relation(fields: [pdfId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, pdfId])
+  @@map("pdf_bookmarks")
+}
+
+model Quiz {
+  id             Int            @id @default(autoincrement())
+  courseId       Int?           @map("course_id")
+  title          String
+  durationMinutes Int           @default(15) @map("duration_minutes")
+  passingScore   Int            @default(70) @map("passing_score")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  course         Course?        @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  questions      QuizQuestion[]
+  attempts       QuizAttempt[]
+
+  @@map("quizzes")
+}
+
+model QuizQuestion {
+  id            Int      @id @default(autoincrement())
+  quizId        Int      @map("quiz_id")
+  question      String
+  questionType  String   @default("MCQ") @map("question_type")
+  options       String[]
+  correctAnswer String   @map("correct_answer")
+  quiz          Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  @@map("quiz_questions")
+}
+
+model QuizAttempt {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @map("user_id")
+  quizId      Int      @map("quiz_id")
+  score       Int
+  passed      Boolean
+  attemptedAt DateTime @default(now()) @map("attempted_at")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quiz        Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+
+  @@map("quiz_attempts")
+}
+
+model Challenge {
+  id           Int                   @id @default(autoincrement())
+  title        String
+  description  String
+  difficulty   Difficulty            @default(EASY)
+  starterCode  String?               @map("starter_code")
+  solutionCode String?               @map("solution_code")
+  testCases    Json?                 @map("test_cases")
+  points       Int                   @default(10)
+  category     String                @default("Algorithms")
+  submissions  ChallengeSubmission[]
+
+  @@map("challenges")
+}
+
+model ChallengeSubmission {
+  id           Int       @id @default(autoincrement())
+  userId       Int       @map("user_id")
+  challengeId  Int       @map("challenge_id")
+  submittedCode String   @map("submitted_code")
+  status       String
+  score        Int       @default(0)
+  submittedAt  DateTime  @default(now()) @map("submitted_at")
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  challenge    Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+
+  @@map("challenge_submissions")
+}
+
+model Certificate {
+  id              Int      @id @default(autoincrement())
+  userId          Int      @map("user_id")
+  courseId        Int      @map("course_id")
+  certificateCode String   @unique @map("certificate_code")
+  issuedAt        DateTime @default(now()) @map("issued_at")
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course          Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+  @@map("certificates")
+}
+
+model CommunityPost {
+  id         Int                @id @default(autoincrement())
+  userId     Int                @map("user_id")
+  title      String
+  content    String
+  likesCount Int                @default(0) @map("likes_count")
+  createdAt  DateTime           @default(now()) @map("created_at")
+  updatedAt  DateTime           @default(now()) @updatedAt @map("updated_at")
+  user       User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  comments   CommunityComment[]
+  likes      PostLike[]
+
+  @@map("community_posts")
+}
+
+model CommunityComment {
+  id        Int           @id @default(autoincrement())
+  postId    Int           @map("post_id")
+  userId    Int           @map("user_id")
+  content   String
+  createdAt DateTime      @default(now()) @map("created_at")
+  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("community_comments")
+}
+
+model PostLike {
+  id        Int           @id @default(autoincrement())
+  userId    Int           @map("user_id")
+  postId    Int           @map("post_id")
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  post      CommunityPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, postId])
+  @@map("post_likes")
+}

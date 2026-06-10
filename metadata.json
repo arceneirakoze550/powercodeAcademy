@@ -1,0 +1,6 @@
+{
+  "name": "PowerCode Academy",
+  "description": "An international coding education platform with full courses, tutorials, downloadable PDFs, certificating engine, coding challenges, and a VS Code-style AI coding assistant IDE.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
