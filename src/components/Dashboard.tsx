@@ -1,7 +1,12 @@
 import React, { useState, useEffect } from "react";
 import { User, Course, Tutorial, PdfBook, Quiz, CodingChallenge, Certificate, Announcement, LearningPath } from "../types";
-import { Users, BookOpen, FileText, Landmark, Award, ShieldAlert, TrendingUp, Settings, Plus, Flame, Sparkles, BookMarked, Eye, Trash, CheckSquare, Clock, Upload, Film, Edit, HelpCircle, Check, MapPin, Megaphone, Star, ChevronRight, CornerDownRight } from "lucide-react";
+import TrashManager from "./TrashManager";
+import ContentMediaManager from "./ContentMediaManager";
+import { Users, BookOpen, FileText, Landmark, Award, ShieldAlert, TrendingUp, Settings, Plus, Flame, Sparkles, BookMarked, Eye, Trash, CheckSquare, Clock, Upload, Film, Edit, HelpCircle, Check, MapPin, Megaphone, Star, ChevronRight, CornerDownRight, DollarSign, Zap } from "lucide-react";
 import { exportSelectedItemsToPdf } from "../utils/pdfService";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from "recharts";
+import CertificateSettings from "./CertificateSettings";
+import { ConfirmDeleteModal } from "./ConfirmDeleteModal";
 
 interface DashboardProps {
   user: User;
@@ -9,12 +14,47 @@ interface DashboardProps {
   coursesList: Course[];
   onEnrollCourse: (courseId: number) => void;
   t: (key: string) => string;
+  onUpdateUser?: (updated: User) => void;
+  triggerToast?: (message: string, type?: string) => void;
 }
 
-type AdminTab = "stats" | "courses" | "tutorials" | "pdfs" | "challenges" | "quizzes" | "certificates" | "announcements" | "paths" | "settings" | "trash" | "logs";
+type AdminTab = "stats" | "courses" | "tutorials" | "pdfs" | "challenges" | "quizzes" | "certificates" | "announcements" | "paths" | "settings" | "purchases" | "trash" | "logs" | "sounds" | "transactions" | "media";
 
-export default function Dashboard({ user, onViewCertificate, coursesList, onEnrollCourse, t }: DashboardProps) {
+export default function Dashboard({ user, onViewCertificate, coursesList, onEnrollCourse, t, onUpdateUser, triggerToast }: DashboardProps) {
   const isAdmin = user.role === "ADMIN";
+
+  // LOCAL TOAST FALLBACK SYSTEM
+  const [localToast, setLocalToast] = useState<{ message: string; type: string } | null>(null);
+  const showToast = (message: string, type: string = "info") => {
+    if (triggerToast) {
+      triggerToast(message, type);
+    } else {
+      setLocalToast({ message, type });
+      setTimeout(() => setLocalToast(null), 4000);
+    }
+  };
+
+  // REUSABLE CONFIRM DELETE MODAL STATE
+  const [deleteModal, setDeleteModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: string;
+    onConfirm: () => Promise<void> | void;
+  }>({
+    isOpen: false,
+    title: "",
+    description: "",
+    onConfirm: () => {},
+  });
+
+  const openDeleteConfirmation = (title: string, description: string, onConfirm: () => Promise<void> | void) => {
+    setDeleteModal({
+      isOpen: true,
+      title,
+      description,
+      onConfirm,
+    });
+  };
 
   // ADMIN VIEW CONFIG
   const [activeAdminTab, setActiveAdminTab] = useState<AdminTab>("stats");
@@ -27,6 +67,11 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
   const [landingPromoBanner, setLandingPromoBanner] = useState<string>("");
   const [settingsFeedback, setSettingsFeedback] = useState<string>("");
 
+  // CERTIFICATE OFFICIAL DIGITAL SIGNATURE & SEAL SYSTEM SETTINGS
+  const [officialSignatureUrl, setOfficialSignatureUrl] = useState<string>("");
+  const [officialSealUrl, setOfficialSealUrl] = useState<string>("");
+  const [certificateFeedback, setCertificateFeedback] = useState<string>("");
+
   // COLLECTIONS STATE FOR MANAGEMENT
   const [adminCourses, setAdminCourses] = useState<Course[]>([]);
   const [adminTutorials, setAdminTutorials] = useState<Tutorial[]>([]);
@@ -36,6 +81,30 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
   const [adminCertificates, setAdminCertificates] = useState<Certificate[]>([]);
   const [adminAnnouncements, setAdminAnnouncements] = useState<Announcement[]>([]);
   const [adminLearningPaths, setAdminLearningPaths] = useState<LearningPath[]>([]);
+  const [adminPurchases, setAdminPurchases] = useState<any[]>([]);
+  const [adminPaymentRequests, setAdminPaymentRequests] = useState<any[]>([]);
+  const [adminRevenueData, setAdminRevenueData] = useState<any>(null);
+  const [allUsersList, setAllUsersList] = useState<any[]>([]);
+  const [rejectId, setRejectId] = useState<number | null>(null);
+  const [rejectExplanation, setRejectExplanation] = useState<string>("");
+  const [paymentStatusFilter, setPaymentStatusFilter] = useState<string>("ALL");
+  const [paymentQuery, setPaymentQuery] = useState<string>("");
+  const [revenueTimeframe, setRevenueTimeframe] = useState<string>("all");
+
+  const [userNotificationSettings, setUserNotificationSettings] = useState<any>({
+    emailNotifications: true,
+    pushNotifications: true,
+    soundNotifications: true,
+    inAppNotifications: true,
+  });
+  const [notificationSoundsList, setNotificationSoundsList] = useState<any[]>([]);
+  const [adminSelectedAlertType, setAdminSelectedAlertType] = useState<string>("success");
+  const [customSoundUploadUrl, setCustomSoundUploadUrl] = useState<string>("");
+  const [customSoundFileLabel, setCustomSoundFileLabel] = useState<string>("");
+  const [studentPaymentRequestsList, setStudentPaymentRequestsList] = useState<any[]>([]);
+  const [adminTransactions, setAdminTransactions] = useState<any[]>([]);
+  const [txFilterQuery, setTxFilterQuery] = useState<string>("");
+  const [txFilterStatus, setTxFilterStatus] = useState<string>("ALL");
 
   // FILE UPLOAD AND SIMULATION HELPER
   const [uploadProgress, setUploadProgress] = useState<string>("");
@@ -46,6 +115,7 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
   const [courseDesc, setCourseDesc] = useState<string>("");
   const [courseThumbnail, setCourseThumbnail] = useState<string>("");
   const [courseBanner, setCourseBanner] = useState<string>("");
+  const [uploadedVideoUrl, setUploadedVideoUrl] = useState<string>("");
   const [coursePrice, setCoursePrice] = useState<string>("0");
   const [coursePremium, setCoursePremium] = useState<boolean>(false);
   const [courseModulesJson, setCourseModulesJson] = useState<string>(
@@ -68,6 +138,7 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
   const [tutLanguage, setTutLanguage] = useState<string>("javascript");
   const [tutCoverImg, setTutCoverImg] = useState<string>("");
   const [tutVideoUrl, setTutVideoUrl] = useState<string>("");
+  const [tutEmbeddedVideoUrl, setTutEmbeddedVideoUrl] = useState<string>("");
 
   // 3. PDF BOOK CREATOR STATE
   const [pdfTitle, setPdfTitle] = useState<string>("");
@@ -134,6 +205,9 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
   // GENERAL STATE VALIDATION FEEDBACK
   const [feedback, setFeedback] = useState<string>("");
 
+  // DATABASE CONNECTION STATUS (NEON POSTGRES VS FALLBACK)
+  const [dbStatus, setDbStatus] = useState<{ connected: boolean; driver: string; hasConnectionString: boolean } | null>(null);
+
   // LOAD COMPLETE DATA PANEL FOR CORRESPONDING VISITS
   const loadPlatformData = async () => {
     setLoading(true);
@@ -154,12 +228,23 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
       const statsData = await safeFetchJson("/api/analytics");
       setStats(statsData);
 
+      // Fetch Postgres / Neon connection status
+      const pgStatus = await safeFetchJson("/api/db-status");
+      setDbStatus(pgStatus);
+
       // Settings config
       const setData = await safeFetchJson("/api/settings");
       if (setData.settings) {
         setPlatformName(setData.settings.platformName);
         setEnableRegistration(setData.settings.enableRegistration);
         setLandingPromoBanner(setData.settings.landingPromoBanner);
+      }
+
+      // Certificate System Settings
+      const certSetData = await safeFetchJson("/api/system-settings");
+      if (certSetData.system_settings) {
+        setOfficialSignatureUrl(certSetData.system_settings.official_signature_url || "");
+        setOfficialSealUrl(certSetData.system_settings.official_seal_url || "");
       }
 
       // Catalog entities
@@ -203,11 +288,81 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
       });
       setAdminLearningPaths(pathsData.learningPaths || []);
 
+      // PDF Purchases
+      const purchasesData = await safeFetchJson("/api/pdf-purchases", {
+        headers: { "Authorization": `Bearer ${user.email}` }
+      });
+      setAdminPurchases(purchasesData.purchases || []);
+
+      // Universal Payments Requests
+      const paymentsReqData = await safeFetchJson("/api/payments/admin", {
+        headers: { "Authorization": `Bearer ${user.email}` }
+      });
+      setAdminPaymentRequests(paymentsReqData.requests || []);
+
+      // Revenue Analytics metrics
+      const revenueReport = await safeFetchJson("/api/admin/revenue", {
+        headers: { "Authorization": `Bearer ${user.email}` }
+      });
+      setAdminRevenueData(revenueReport || null);
+
+      // Fetch all system users (for admin management and trash soft-delete references)
+      const usersTable = await safeFetchJson("/api/admin/tables/users", {
+        headers: { "Authorization": `Bearer ${user.email}` }
+      });
+      if (usersTable && Array.isArray(usersTable.rows)) {
+        setAllUsersList(usersTable.rows);
+      } else if (usersTable && Array.isArray(usersTable.items)) {
+        setAllUsersList(usersTable.items);
+      } else {
+        // Fallback or Direct User Array sync
+        const customUsers = await safeFetchJson("/api/admin/tables/users", {
+          headers: { "Authorization": `Bearer ${user.email}` }
+        });
+        setAllUsersList(Array.isArray(customUsers) ? customUsers : []);
+      }
+
       // Admin logs
       const logsData = await safeFetchJson("/api/admin/logs", {
         headers: { "Authorization": `Bearer ${user.email}` }
       });
       setAdminActivityLogs(logsData.logs || []);
+
+      // Admin transactions
+      if (isAdmin) {
+        const txData = await safeFetchJson("/api/admin/transactions", {
+          headers: { "Authorization": `Bearer ${user.email}` }
+        });
+        if (txData && txData.success && Array.isArray(txData.transactions)) {
+          setAdminTransactions(txData.transactions);
+        }
+      }
+
+      // Load Notification settings for active user
+      const settingsData = await safeFetchJson("/api/notifications/settings", {
+        headers: { "Authorization": `Bearer ${user.email}` }
+      });
+      if (settingsData.success && settingsData.settings) {
+        setUserNotificationSettings(settingsData.settings);
+      }
+
+      // Load Notification sounds list
+      const soundsData = await safeFetchJson("/api/notifications/sounds", {
+        headers: { "Authorization": `Bearer ${user.email}` }
+      });
+      if (soundsData.success && Array.isArray(soundsData.sounds)) {
+        setNotificationSoundsList(soundsData.sounds);
+      }
+
+      // Load non-admin student payments list for Transaction History View
+      if (user.role !== "ADMIN") {
+        const studentPayments = await safeFetchJson("/api/payments/my-status", {
+          headers: { "Authorization": `Bearer ${user.email}` }
+        });
+        if (studentPayments && Array.isArray(studentPayments.requests)) {
+          setStudentPaymentRequestsList(studentPayments.requests);
+        }
+      }
 
     } catch (e) {
       console.error("Dashboard database synchronization failed", e);
@@ -233,14 +388,7 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
       return;
     }
 
-    let msg = `Are you sure you want to ${action} ${ids.length} selected items?`;
-    if (action === "permanent_delete") {
-      msg = `CRITICAL WARNING: This will permanently and irreversibly delete ${ids.length} selected items from the active database! Continue?`;
-    }
-    if (!confirm(msg)) return;
-
-    setFeedback(`Executing bulk ${action}...`);
-    try {
+    const performStoreAction = async () => {
       const res = await fetch("/api/admin/bulk", {
         method: "POST",
         headers: {
@@ -251,20 +399,53 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
       });
       const data = await res.json();
       if (data.error) {
-        setFeedback(`❌ Bulk action error: ${data.error}`);
+        throw new Error(data.error);
+      }
+      
+      // Update local state immediately via local filter operations
+      if (action === "delete" || action === "permanent_delete") {
+        if (contentType === "COURSE") {
+          setAdminCourses(prev => prev.filter(c => !ids.includes(c.id)));
+          setSelectedCourses([]);
+        } else if (contentType === "TUTORIAL") {
+          setAdminTutorials(prev => prev.filter(t => !ids.includes(t.id)));
+          setSelectedTutorials([]);
+        } else if (contentType === "PDF") {
+          setAdminPdfs(prev => prev.filter(p => !ids.includes(p.id)));
+          setSelectedPdfs([]);
+        } else if (contentType === "CHALLENGE") {
+          setAdminChallenges(prev => prev.filter(c => !ids.includes(c.id)));
+          setSelectedChallenges([]);
+        } else if (contentType === "ANNOUNCEMENT") {
+          setAdminAnnouncements(prev => prev.filter(a => !ids.includes(a.id)));
+          setSelectedAnnouncements([]);
+        }
       } else {
-        setFeedback(`✅ Bulk ${action} completed successfully!`);
-        // Clear selection states
         if (contentType === "COURSE") setSelectedCourses([]);
         else if (contentType === "TUTORIAL") setSelectedTutorials([]);
         else if (contentType === "PDF") setSelectedPdfs([]);
         else if (contentType === "CHALLENGE") setSelectedChallenges([]);
         else if (contentType === "ANNOUNCEMENT") setSelectedAnnouncements([]);
-        
-        loadPlatformData();
       }
-    } catch {
-      setFeedback("❌ Failed to reach system administration endpoint.");
+
+      showToast(`Bulk ${action} completed successfully! 🧹`, "success");
+      loadPlatformData();
+    };
+
+    if (action === "delete" || action === "permanent_delete") {
+      let title = "Execute Bulk Delete?";
+      let desc = `Are you sure you want to delete ${ids.length} selected items?`;
+      if (action === "permanent_delete") {
+        title = "Execute Bulk Permanent Delete?";
+        desc = `CRITICAL WARNING: This will permanently and irreversibly delete ${ids.length} selected items from the active database! Continue?`;
+      }
+      openDeleteConfirmation(title, desc, performStoreAction);
+    } else {
+      try {
+        await performStoreAction();
+      } catch (err: any) {
+        showToast(err.message, "error");
+      }
     }
   };
 
@@ -302,29 +483,55 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
     }
   };
 
-  // LOCAL SECURE COMPUTER FILE UPLOAD SIMULATOR (CLOUDINARY)
+  // LOCAL SECURE COMPUTER FILE UPLOAD SIMULATOR (WITH ACTUAL BASE64 DATA URL READS FOR REAL IMAGES)
   const handleFileSystemUploadSim = async (e: React.ChangeEvent<HTMLInputElement>, fileType: "image" | "video", setterCallback: (url: string) => void) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setUploadProgress(`Uploading ${file.name} to Cloudinary Storage...`);
+    setUploadProgress(`Processing ${file.name}...`);
 
     try {
-      const response = await fetch("/api/upload", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          fileName: file.name,
-          fileType: fileType
-        })
-      });
-
-      const data = await response.json();
-      if (data.success) {
-        setterCallback(data.url);
-        setUploadProgress(`✅ Successfully linked direct Cloudinary secure URL!`);
+      if (fileType === "image") {
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+          const base64Url = event.target?.result as string;
+          if (base64Url) {
+            setterCallback(base64Url);
+            setUploadProgress(`✅ Loaded high-fidelity digital asset: ${file.name}`);
+            
+            // Log file upload metadata in background for backend consistency
+            fetch("/api/upload", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                fileName: file.name,
+                fileType: "image",
+                fileData: base64Url
+              })
+            }).catch(err => console.warn("Background upload sync bypassed", err));
+          }
+        };
+        reader.onerror = () => {
+          setUploadProgress("❌ Failed to parse local image asset.");
+        };
+        reader.readAsDataURL(file);
       } else {
-        setUploadProgress(`❌ File upload pipeline error.`);
+        const response = await fetch("/api/upload", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fileName: file.name,
+            fileType: fileType
+          })
+        });
+
+        const data = await response.json();
+        if (data.success) {
+          setterCallback(data.url);
+          setUploadProgress(`✅ Successfully linked direct Cloudinary secure URL!`);
+        } else {
+          setUploadProgress(`❌ File upload pipeline error.`);
+        }
       }
     } catch {
       setUploadProgress(`❌ Network pipeline connection error.`);
@@ -393,21 +600,24 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
     setFeedback("🛠️ Course selected for revisions. Edit fields above.");
   };
 
-  const handleDeleteCourse = async (id: number) => {
-    if (!confirm("Are you sure you want to permanently delete this course?")) return;
-    try {
-      const res = await fetch(`/api/courses/${id}`, {
-        method: "DELETE",
-        headers: { "Authorization": `Bearer ${user.email}` }
-      });
-      const data = await res.json();
-      if (data.error) alert(data.error);
-      else {
+  const handleDeleteCourse = (id: number) => {
+    openDeleteConfirmation(
+      "Move Course to Trash?",
+      "Are you sure you want to move this course to the Trash bin?",
+      async () => {
+        const res = await fetch(`/api/courses/${id}`, {
+          method: "DELETE",
+          headers: { "Authorization": `Bearer ${user.email}` }
+        });
+        const data = await res.json();
+        if (data.error) {
+          throw new Error(data.error);
+        }
+        setAdminCourses(prev => prev.filter(c => c.id !== id));
+        showToast("Course successfully moved to trash! 🧹", "success");
         loadPlatformData();
       }
-    } catch (err) {
-      console.error(err);
-    }
+    );
   };
 
   const resetCourseForm = () => {
@@ -434,7 +644,8 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
       codeSnippet: tutCode,
       languageSlug: tutLanguage,
       coverImageUrl: tutCoverImg,
-      videoUrl: tutVideoUrl
+      videoUrl: tutVideoUrl,
+      embedded_video_url: tutEmbeddedVideoUrl
     };
 
     try {
@@ -472,20 +683,28 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
     setTutLanguage(t.languageSlug || "javascript");
     setTutCoverImg(t.coverImageUrl || "");
     setTutVideoUrl(t.videoUrl || "");
+    setTutEmbeddedVideoUrl(t.embedded_video_url || "");
     setFeedback("🛠️ Editing tutorial settings.");
   };
 
-  const handleDeleteTutorial = async (id: number) => {
-    if (!confirm("Remove this tutorial?")) return;
-    try {
-      const res = await fetch(`/api/tutorials/${id}`, {
-        method: "DELETE",
-        headers: { "Authorization": `Bearer ${user.email}` }
-      });
-      loadPlatformData();
-    } catch (err) {
-      console.error(err);
-    }
+  const handleDeleteTutorial = (id: number) => {
+    openDeleteConfirmation(
+      "Move Tutorial to Trash?",
+      "Are you sure you want to move this tutorial to the Trash bin?",
+      async () => {
+        const res = await fetch(`/api/tutorials/${id}`, {
+          method: "DELETE",
+          headers: { "Authorization": `Bearer ${user.email}` }
+        });
+        const data = await res.json();
+        if (data.error) {
+          throw new Error(data.error);
+        }
+        setAdminTutorials(prev => prev.filter(t => t.id !== id));
+        showToast("Tutorial successfully moved to trash! 🧹", "success");
+        loadPlatformData();
+      }
+    );
   };
 
   const resetTutorialForm = () => {
@@ -497,6 +716,7 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
     setTutLanguage("javascript");
     setTutCoverImg("");
     setTutVideoUrl("");
+    setTutEmbeddedVideoUrl("");
   };
 
   // PDF BOOK ADDITION SUBMITTER
@@ -553,17 +773,24 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
     setPdfPremium(false);
   };
 
-  const handleDeletePdf = async (id: number) => {
-    if (!confirm("Permanently strip this PDF?")) return;
-    try {
-      await fetch(`/api/pdfs/${id}`, {
-        method: "DELETE",
-        headers: { "Authorization": `Bearer ${user.email}` }
-      });
-      loadPlatformData();
-    } catch (e) {
-      console.error(e);
-    }
+  const handleDeletePdf = (id: number) => {
+    openDeleteConfirmation(
+      "Move PDF Resource to Trash?",
+      "Are you sure you want to move this PDF resource to the Trash bin?",
+      async () => {
+        const res = await fetch(`/api/pdfs/${id}`, {
+          method: "DELETE",
+          headers: { "Authorization": `Bearer ${user.email}` }
+        });
+        const data = await res.json();
+        if (data.error) {
+          throw new Error(data.error);
+        }
+        setAdminPdfs(prev => prev.filter(pdf => pdf.id !== id));
+        showToast("PDF resource successfully moved to trash! 🧹", "success");
+        loadPlatformData();
+      }
+    );
   };
 
   // CHALLENGE SUBMITTER
@@ -639,17 +866,24 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
     setChallengeCategory("Algorithms");
   };
 
-  const handleDeleteChallenge = async (id: number) => {
-    if (!confirm("Strip challenge?")) return;
-    try {
-      await fetch(`/api/challenges/${id}`, {
-        method: "DELETE",
-        headers: { "Authorization": `Bearer ${user.email}` }
-      });
-      loadPlatformData();
-    } catch (e) {
-      console.error(e);
-    }
+  const handleDeleteChallenge = (id: number) => {
+    openDeleteConfirmation(
+      "Move Challenge to Trash?",
+      "Are you sure you want to move this coding challenge to the Trash bin?",
+      async () => {
+        const res = await fetch(`/api/challenges/${id}`, {
+          method: "DELETE",
+          headers: { "Authorization": `Bearer ${user.email}` }
+        });
+        const data = await res.json();
+        if (data.error) {
+          throw new Error(data.error);
+        }
+        setAdminChallenges(prev => prev.filter(c => c.id !== id));
+        showToast("Coding challenge successfully moved to trash! 🧹", "success");
+        loadPlatformData();
+      }
+    );
   };
 
   // QUIZ SUBMITTER
@@ -692,17 +926,24 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
     }
   };
 
-  const handleDeleteQuiz = async (id: number) => {
-    if (!confirm("Strip quiz?")) return;
-    try {
-      await fetch(`/api/quizzes/${id}`, {
-        method: "DELETE",
-        headers: { "Authorization": `Bearer ${user.email}` }
-      });
-      loadPlatformData();
-    } catch (e) {
-      console.error(e);
-    }
+  const handleDeleteQuiz = (id: number) => {
+    openDeleteConfirmation(
+      "Move Quiz to Trash?",
+      "Are you sure you want to move this assessment quiz to the Trash bin?",
+      async () => {
+        const res = await fetch(`/api/quizzes/${id}`, {
+          method: "DELETE",
+          headers: { "Authorization": `Bearer ${user.email}` }
+        });
+        const data = await res.json();
+        if (data.error) {
+          throw new Error(data.error);
+        }
+        setAdminQuizzes(prev => prev.filter(q => q.id !== id));
+        showToast("Quiz successfully moved to trash! 🧹", "success");
+        loadPlatformData();
+      }
+    );
   };
 
   // MANUAL CERTIFICATE GENERATION TRIGGER
@@ -739,17 +980,24 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
     }
   };
 
-  const handleRevokeCertificate = async (code: string) => {
-    if (!confirm(`Revoke and delete Certificate credentials code: ${code}?`)) return;
-    try {
-      await fetch(`/api/certificates/${code}`, {
-        method: "DELETE",
-        headers: { "Authorization": `Bearer ${user.email}` }
-      });
-      loadPlatformData();
-    } catch (e) {
-      console.error(e);
-    }
+  const handleRevokeCertificate = (code: string) => {
+    openDeleteConfirmation(
+      "Revoke Certificate?",
+      `Are you sure you want to revoke and delete Certificate credentials code: ${code}?`,
+      async () => {
+        const res = await fetch(`/api/certificates/${code}`, {
+          method: "DELETE",
+          headers: { "Authorization": `Bearer ${user.email}` }
+        });
+        const data = await res.json();
+        if (data.error) {
+          throw new Error(data.error);
+        }
+        setAdminCertificates(prev => prev.filter(c => c.code !== code));
+        showToast("Certificate successfully revoked! 📜❌", "success");
+        loadPlatformData();
+      }
+    );
   };
 
   // ANNOUNCEMENTS MANAGERS
@@ -801,16 +1049,24 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
     setAnnImportant(true);
   };
 
-  const handleDeleteAnnouncement = async (id: number) => {
-    try {
-      await fetch(`/api/announcements/${id}`, {
-        method: "DELETE",
-        headers: { "Authorization": `Bearer ${user.email}` }
-      });
-      loadPlatformData();
-    } catch (e) {
-      console.error(e);
-    }
+  const handleDeleteAnnouncement = (id: number) => {
+    openDeleteConfirmation(
+      "Move Announcement to Trash?",
+      "Are you sure you want to move this announcement banner to the Trash bin?",
+      async () => {
+        const res = await fetch(`/api/announcements/${id}`, {
+          method: "DELETE",
+          headers: { "Authorization": `Bearer ${user.email}` }
+        });
+        const data = await res.json();
+        if (data.error) {
+          throw new Error(data.error);
+        }
+        setAdminAnnouncements(prev => prev.filter(a => a.id !== id));
+        showToast("Announcement successfully moved to trash! 🧹", "success");
+        loadPlatformData();
+      }
+    );
   };
 
   // PATH MANAGERS
@@ -887,20 +1143,72 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
     }
   };
 
+  const handleSaveCertificateSettings = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setCertificateFeedback("Saving certificate assets...");
+    try {
+      const res = await fetch("/api/system-settings", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${user.email}`
+        },
+        body: JSON.stringify({
+          official_signature_url: officialSignatureUrl,
+          official_seal_url: officialSealUrl
+        })
+      });
+      const data = await res.json();
+      if (data.error) {
+        setCertificateFeedback(data.error);
+      } else {
+        setCertificateFeedback("✅ Certificate signature & seal stored permanently!");
+        setTimeout(() => setCertificateFeedback(""), 3500);
+      }
+    } catch (err: any) {
+      setCertificateFeedback(`❌ Error: ${err.message || err}`);
+    }
+  };
+
   // Helper arrays for dirty clean code formatting
   const modulesJsonStringClean = (str: string) => str.trim();
 
   return (
     <div className="space-y-6 font-sans select-none" id="powercode-dashboard-engine">
+
+      {/* Local Toast Notification box fallback */}
+      {localToast && (
+        <div id="visual-toast-banner" className="fixed bottom-6 right-6 z-50 bg-[#161b22] border border-[#ff7b00]/60 p-4 rounded-2xl shadow-[0_0_30px_rgba(255,123,0,0.25)] flex items-center gap-3.5 max-w-sm transition-all duration-300 border-l-4 border-l-[#ff7b00]">
+          <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${
+            localToast.type === "success" ? "bg-green-500 shadow-[0_0_10px_#22c55e]" :
+            localToast.type === "warning" ? "bg-amber-400 shadow-[0_0_10px_#fbbf24]" :
+            localToast.type === "error" ? "bg-red-500 shadow-[0_0_10px_#ef4444]" : "bg-blue-400 shadow-[0_0_10px_#60a5fa]"
+          }`} />
+          <div className="flex-1 min-w-0">
+            <h6 className="text-[9px] uppercase font-bold tracking-wider text-gray-500 font-mono">Live Event Alert</h6>
+            <p className="text-white text-xs font-semibold leading-relaxed break-words mt-0.5">{localToast.message}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Central Confirm Delete Modal */}
+      <ConfirmDeleteModal
+        isOpen={deleteModal.isOpen}
+        title={deleteModal.title}
+        description={deleteModal.description}
+        onClose={() => setDeleteModal(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={deleteModal.onConfirm}
+      />
       
       {/* ROLE AND USER GREETINGS ROW */}
       <div className="bg-gradient-to-r from-[#161b22] via-[#21262d] to-[#ff7b00]/10 p-5 rounded-2xl border border-[#30363d] flex flex-col md:flex-row justify-between items-start md:items-center gap-4 shadow-lg">
         <div className="flex items-center gap-3.5">
           <div className="relative">
             <img
-              src={user.avatarUrl || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100"}
+              src={user.profile_picture_url || user.avatarUrl || "https://images.unsplash.com/photo-1549790108-3777bc3021f1?w=100"}
               alt={user.name}
               className="w-12 h-12 rounded-full border-2 border-[#ff7b00] object-cover"
+              referrerPolicy="no-referrer"
             />
             <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-green-500 border-2 border-[#161b22] rounded-full" />
           </div>
@@ -954,7 +1262,7 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
           
           {/* Collapsible/Tab navigation rows for Admin panel */}
           <div className="flex flex-wrap gap-1.5 border-b border-[#30363d] pb-3" id="admin-tabs">
-            {(["stats", "courses", "tutorials", "pdfs", "challenges", "quizzes", "certificates", "announcements", "paths", "settings", "trash", "logs"] as AdminTab[]).map((tab) => (
+            {(["stats", "courses", "tutorials", "pdfs", "challenges", "quizzes", "certificates", "announcements", "paths", "settings", "purchases", "sounds", "media", "transactions", "trash", "logs"] as AdminTab[]).map((tab) => (
               <button
                 key={tab}
                 onClick={() => { setActiveAdminTab(tab); setFeedback(""); }}
@@ -965,76 +1273,230 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
                 }`}
                 id={`admin-tab-trigger-${tab}`}
               >
-                {tab === "pdfs" ? "PDF Books" : tab === "paths" ? "Learning Paths" : tab === "trash" ? "Trash Bin" : tab === "logs" ? "Activity Logs" : tab}
+                {tab === "pdfs" ? "PDF Books" : tab === "paths" ? "Learning Paths" : tab === "trash" ? "Trash Bin" : tab === "logs" ? "Activity Logs" : tab === "purchases" ? "MoMo Purchases" : tab === "sounds" ? "Notification Sounds" : tab === "transactions" ? "Transaction History" : tab === "media" ? "Content Media Manager" : tab}
               </button>
             ))}
           </div>
 
           {/* TAB 1: OVERVIEW METRIC INDICATORS */}
           {activeAdminTab === "stats" && stats && (
-            <div className="space-y-6" id="admin-stats-view">
-              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-                <div className="bg-[#161b22] border border-[#30363d] p-4 rounded-xl text-center">
-                  <Users className="w-6 h-6 text-[#ff7b00] mx-auto mb-2" />
-                  <span className="text-[10px] text-gray-400 font-bold block uppercase tracking-wider">TOTAL MEMBERS</span>
+            <div className="space-y-6 animate-fade-in font-sans" id="admin-stats-view">
+              
+              {/* Core Financial Stat Cards */}
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                <div className="bg-[#161b22] border border-[#30363d] p-4 rounded-xl text-center shadow-lg hover:border-[#ff7b00]/30 transition-all">
+                  <Users className="w-5 h-5 text-[#ff7b00] mx-auto mb-2" />
+                  <span className="text-[9px] text-gray-400 font-bold block uppercase tracking-wider">Total Students</span>
                   <span className="text-xl font-extrabold text-white mt-1 block">{stats.totalUsers || 0}</span>
                 </div>
-                <div className="bg-[#161b22] border border-[#30363d] p-4 rounded-xl text-center">
-                  <BookOpen className="w-6 h-6 text-orange-500 mx-auto mb-2" />
-                  <span className="text-[10px] text-gray-400 font-bold block uppercase tracking-wider">COURSES</span>
+                <div className="bg-[#161b22] border border-[#30363d] p-4 rounded-xl text-center shadow-lg hover:border-[#ff7b00]/30 transition-all">
+                  <BookOpen className="w-5 h-5 text-orange-500 mx-auto mb-2" />
+                  <span className="text-[9px] text-gray-400 font-bold block uppercase tracking-wider">Courses Pub</span>
                   <span className="text-xl font-extrabold text-white mt-1 block">{stats.totalCourses || 0}</span>
                 </div>
-                <div className="bg-[#161b22] border border-[#30363d] p-4 rounded-xl text-center">
-                  <Award className="w-6 h-6 text-amber-500 mx-auto mb-2" />
-                  <span className="text-[10px] text-gray-400 font-bold block uppercase tracking-wider">CERTIFICATED</span>
+                <div className="bg-[#161b22] border border-[#30363d] p-4 rounded-xl text-center shadow-lg hover:border-[#ff7b00]/30 transition-all">
+                  <Award className="w-5 h-5 text-amber-500 mx-auto mb-2" />
+                  <span className="text-[9px] text-gray-400 font-bold block uppercase tracking-wider">Certificates</span>
                   <span className="text-xl font-extrabold text-white mt-1 block">{stats.totalCertificates || 0}</span>
                 </div>
-                <div className="bg-[#161b22] border border-[#30363d] p-4 rounded-xl text-center">
-                  <FileText className="w-6 h-6 text-yellow-500 mx-auto mb-2" />
-                  <span className="text-[10px] text-gray-400 font-bold block uppercase tracking-wider">TUTORIALS</span>
-                  <span className="text-xl font-extrabold text-white mt-1 block">{stats.totalTutorials || 0}</span>
+                <div className="bg-[#161b22] border border-[#30363d] p-4 rounded-xl text-center shadow-lg hover:border-[#ff7b00]/30 transition-all">
+                  <DollarSign className="w-5 h-5 text-emerald-400 mx-auto mb-2" />
+                  <span className="text-[9px] text-gray-400 font-bold block uppercase tracking-wider">Total Sales</span>
+                  <span className="text-xl font-extrabold text-emerald-400 mt-1 block">
+                    UGX {(adminRevenueData?.totalRevenue || 0).toLocaleString()}
+                  </span>
                 </div>
-                <div className="bg-[#161b22] border border-[#30363d] p-4 rounded-xl text-center">
-                  <Landmark className="w-6 h-6 text-green-500 mx-auto mb-2" />
-                  <span className="text-[10px] text-gray-400 font-bold block uppercase tracking-wider">REVENUE</span>
-                  <span className="text-xl font-extrabold text-green-400 mt-1 block">${stats.revenue || 0}</span>
+                <div className="bg-[#161b22] border border-[#30363d] p-4 rounded-xl text-center shadow-lg hover:border-[#ff7b00]/30 transition-all">
+                  <TrendingUp className="w-5 h-5 text-blue-400 mx-auto mb-2" />
+                  <span className="text-[9px] text-gray-400 font-bold block uppercase tracking-wider">This Month</span>
+                  <span className="text-xl font-extrabold text-blue-400 mt-1 block">
+                    UGX {(adminRevenueData?.monthlyRevenue || 0).toLocaleString()}
+                  </span>
                 </div>
-                <div className="bg-[#161b22] border border-[#30363d] p-4 rounded-xl text-center">
-                  <Sparkles className="w-6 h-6 text-purple-500 mx-auto mb-2" />
-                  <span className="text-[10px] text-gray-400 font-bold block uppercase tracking-wider">CHALLENGES</span>
-                  <span className="text-xl font-extrabold text-white mt-1 block">{adminChallenges.length}</span>
+                <div className="bg-[#161b22] border border-[#ff7b00]/20 p-4 rounded-xl text-center shadow-lg bg-orange-500/5">
+                  <Zap className="w-5 h-5 text-orange-400 mx-auto mb-2" />
+                  <span className="text-[9px] text-gray-300 font-bold block uppercase tracking-wider">Today's Sales</span>
+                  <span className="text-sm font-extrabold text-white mt-1 block">
+                    UGX {(adminRevenueData?.todaysRevenue || 0).toLocaleString()}
+                  </span>
                 </div>
               </div>
 
-              {/* Graphics Visual Presentation Card built with purely high contrast CSS elements */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                <div className="bg-[#161b22] border border-[#30363d] p-4 rounded-xl">
-                  <h4 className="text-sm font-bold text-white mb-4">WEEKLY RECRUITMENT TREND</h4>
-                  <div className="h-40 flex items-end justify-between px-2 pt-4 bg-[#0d1117] rounded-lg border border-[#21262d]">
-                    {[4, 10, 15, 27, 45, 62, 85].map((val, idx) => (
-                      <div key={idx} className="flex flex-col items-center w-full group">
-                        <span className="text-[8px] text-gray-500 hidden group-hover:block transition-all mb-1">{val} refs</span>
-                        <div
-                          className="bg-[#ff7b00] rounded-t w-6 transition-all"
-                          style={{ height: `${val * 1.2}px` }}
-                        />
-                        <span className="text-[8px] text-gray-400 mt-1.5 font-mono">W{idx + 1}</span>
+              {/* RECHARTS FINANCIAL DAILY TRENDS GRAPH */}
+              <div className="bg-[#161b22] border border-[#30363d] p-5 rounded-2xl shadow-xl">
+                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 mb-4">
+                  <div>
+                    <h4 className="text-xs font-mono font-bold text-gray-400 tracking-widest uppercase animate-pulse">ACADEMY FISCAL STREAM</h4>
+                    <h3 className="text-base font-extrabold text-white">Daily Revenue Progression (Uganda Shillings)</h3>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-3">
+                    {/* Timeframe Filter Selector */}
+                    <div className="flex items-center gap-1.5 text-xs text-slate-300">
+                      <span className="text-[10px] uppercase font-bold text-slate-500 font-mono">Filter Time:</span>
+                      <select
+                        value={revenueTimeframe}
+                        onChange={(e) => setRevenueTimeframe(e.target.value)}
+                        className="bg-[#0d1117] border border-[#30363d] rounded px-2 py-1 text-[11px] text-white focus:outline-none focus:border-[#ff7b00] font-mono cursor-pointer"
+                      >
+                        <option value="all">All Time</option>
+                        <option value="30days">Past 30 Days</option>
+                        <option value="7days">Past 7 Days</option>
+                        <option value="today">Today Only</option>
+                      </select>
+                    </div>
+
+                    {/* Download CSV Action Trigger Button */}
+                    <button
+                      onClick={() => {
+                        const now = Date.now();
+                        let filteredRequests = [...adminPaymentRequests];
+
+                        if (revenueTimeframe === "7days") {
+                          const cutOff = now - 7 * 24 * 3600 * 1000;
+                          filteredRequests = filteredRequests.filter((r) => {
+                            const dateVal = r.createdAt || r.timestamp || r.created_at || now;
+                            return new Date(dateVal).getTime() >= cutOff;
+                          });
+                        } else if (revenueTimeframe === "30days") {
+                          const cutOff = now - 30 * 24 * 3600 * 1000;
+                          filteredRequests = filteredRequests.filter((r) => {
+                            const dateVal = r.createdAt || r.timestamp || r.created_at || now;
+                            return new Date(dateVal).getTime() >= cutOff;
+                          });
+                        } else if (revenueTimeframe === "today") {
+                          const cutOff = new Date().setHours(0,0,0,0);
+                          filteredRequests = filteredRequests.filter((r) => {
+                            const dateVal = r.createdAt || r.timestamp || r.created_at || now;
+                            return new Date(dateVal).getTime() >= cutOff;
+                          });
+                        }
+
+                        const headers = ["Transaction ID", "Student Name", "Student Email", "Purchased Content", "Price (UGX)", "Payment Channel", "Status", "Timestamp"];
+                        const rows = filteredRequests.map((r) => {
+                          return [
+                            r.id || "",
+                            `"${(r.userName || "Student").replace(/"/g, '""')}"`,
+                            r.userEmail || "",
+                            `"${(r.contentTitle || r.contentType || "Premium Product").replace(/"/g, '""')}"`,
+                            r.amount || r.purchaseAmount || 0,
+                            r.paymentMethod || "MoMo",
+                            r.status || "APPROVED",
+                            r.createdAt || r.timestamp || r.created_at || ""
+                          ];
+                        });
+
+                        const csvContent = [headers.join(","), ...rows.map((e) => e.join(","))].join("\n");
+                        const mimeBlob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+                        const blobUrl = URL.createObjectURL(mimeBlob);
+                        
+                        const clickTrack = document.createElement("a");
+                        clickTrack.href = blobUrl;
+                        clickTrack.setAttribute("download", `PowerCode_Academy_Revenue_Report_${revenueTimeframe}_${new Date().toISOString().split('T')[0]}.csv`);
+                        document.body.appendChild(clickTrack);
+                        clickTrack.click();
+                        document.body.removeChild(clickTrack);
+                        setFeedback(`✨ Successfully exported ${filteredRequests.length} rows to CSV!`);
+                        setTimeout(() => setFeedback(""), 4000);
+                      }}
+                      className="bg-[#2ea44f] hover:bg-[#2c974b] text-white font-extrabold text-[10px] px-2.5 py-1.5 rounded uppercase tracking-wide transition-colors cursor-pointer flex items-center gap-1 font-mono"
+                    >
+                      <FileText className="w-3 h-3" />
+                      <span>Download CSV</span>
+                    </button>
+
+                    <div className="flex gap-3 text-xs font-mono text-gray-400 bg-[#0d1117] p-1.5 rounded-lg border border-[#21262d]">
+                      <div className="flex items-center gap-1">
+                        <span className="w-2 h-2 bg-emerald-500 rounded-full inline-block"></span>
+                        Approved: <span className="text-white font-bold">{adminRevenueData?.approvedPaymentsCount || 0}</span>
                       </div>
-                    ))}
+                      <div className="flex items-center gap-1">
+                        <span className="w-2 h-2 bg-amber-500 rounded-full inline-block"></span>
+                        Pending: <span className="text-white font-bold">{adminRevenueData?.pendingPaymentsCount || 0}</span>
+                      </div>
+                    </div>
                   </div>
                 </div>
 
-                <div className="bg-[#161b22] border border-[#30363d] p-4 rounded-xl">
-                  <h4 className="text-sm font-bold text-white mb-3">HIGH-SCORE LEADERBOARD</h4>
-                  <div className="space-y-2 mt-4">
-                    {stats.streakLeaderboard?.map((u: any, idx: number) => (
-                      <div key={idx} className="flex justify-between items-center text-xs p-2 bg-[#0d1117] border border-[#21262d] rounded-lg">
-                        <span className="text-gray-400 font-mono font-bold">#{idx + 1} {u.name}</span>
-                        <span className="text-orange-400 font-mono font-bold">{u.streak} days • {u.score} XP</span>
-                      </div>
-                    ))}
+                {adminRevenueData?.revenueChartData?.length > 0 ? (
+                  <div className="h-64 w-full" id="revenue-recharts-container">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={adminRevenueData.revenueChartData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                        <defs>
+                          <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.3}/>
+                            <stop offset="95%" stopColor="#10b981" stopOpacity={0}/>
+                          </linearGradient>
+                        </defs>
+                        <XAxis dataKey="date" stroke="#888888" fontSize={9} tickLine={false} />
+                        <YAxis stroke="#888888" fontSize={9} tickLine={false} />
+                        <Tooltip 
+                          contentStyle={{ backgroundColor: '#0d1117', border: '1px solid #30363d', borderRadius: '8px' }}
+                          labelStyle={{ color: '#888888', fontSize: '10px' }}
+                          itemStyle={{ color: '#10b981', fontWeight: 'bold' }}
+                          formatter={(value: any) => [`UGX ${Number(value).toLocaleString()}`, 'Revenue']}
+                        />
+                        <Area type="monotone" dataKey="amount" stroke="#10b981" strokeWidth={2.5} fillOpacity={1} fill="url(#colorRevenue)" />
+                      </AreaChart>
+                    </ResponsiveContainer>
                   </div>
+                ) : (
+                  <div className="h-48 flex flex-col justify-center items-center bg-[#0d1117] rounded-xl border border-[#21262d] p-6 text-center text-slate-500 text-xs font-mono">
+                    <TrendingUp className="w-8 h-8 text-slate-600 mb-2" />
+                    No transactions captured to form analytical trends charts.
+                  </div>
+                )}
+              </div>
+
+              {/* Bottom Rank Tables & Metrics */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                
+                {/* Most Purchased Content list */}
+                <div className="bg-[#161b22] border border-[#30363d] p-5 rounded-2xl shadow-xl">
+                  <h4 className="text-xs font-mono text-gray-400 font-bold uppercase tracking-wider mb-3">BEST SELLING CURRICULA</h4>
+                  {adminRevenueData?.topPurchasedContent?.length > 0 ? (
+                    <div className="space-y-3">
+                      {adminRevenueData.topPurchasedContent.map((item: any, idx: number) => (
+                        <div key={idx} className="flex justify-between items-center bg-[#0d1117] border border-[#21262d] p-3 rounded-xl">
+                          <div>
+                            <span className="text-[9px] bg-[#21262d] border border-[#30363d] rounded px-1.5 py-0.5 text-[#ff7b00] font-mono font-bold mr-2 uppercase">
+                              #{idx + 1}
+                            </span>
+                            <span className="text-xs font-bold text-white uppercase">{item.title}</span>
+                          </div>
+                          <div className="text-right font-mono text-[11px]">
+                            <span className="text-gray-400 block">{item.count} sales</span>
+                            <span className="text-emerald-400 font-bold">UGX {item.total.toLocaleString()}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="py-10 text-center text-xs text-slate-500 font-mono">No product sales yet.</div>
+                  )}
                 </div>
+
+                {/* Top spenders & High-Score mix */}
+                <div className="bg-[#161b22] border border-[#30363d] p-5 rounded-2xl shadow-xl">
+                  <h4 className="text-xs font-mono text-[#8b949e] font-bold uppercase tracking-wider mb-3">TOP INVESTORS LEDGER</h4>
+                  {adminRevenueData?.topPayingUsers?.length > 0 ? (
+                    <div className="space-y-3">
+                      {adminRevenueData.topPayingUsers.map((item: any, idx: number) => (
+                        <div key={idx} className="flex justify-between items-center bg-[#0d1117] border border-[#21262d] p-3 rounded-xl">
+                          <div>
+                            <span className="text-[10px] text-white font-bold block">{item.name}</span>
+                            <span className="text-[9px] text-[#8b949e] font-mono">{item.email}</span>
+                          </div>
+                          <div className="font-mono text-xs font-extrabold text-emerald-400">
+                            UGX {item.spent.toLocaleString()}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="py-10 text-center text-xs text-slate-500 font-mono">No paying references registered.</div>
+                  )}
+                </div>
+
               </div>
             </div>
           )}
@@ -1102,6 +1564,27 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
                       onChange={(e) => handleFileSystemUploadSim(e, "image", setCourseBanner)}
                       className="text-[10px] text-gray-500 block w-full"
                     />
+                  </div>
+
+                  <div className="space-y-1 border-t border-[#30363d]/50 pt-2 mt-2">
+                    <label className="text-[9px] text-[#ff7b00] block font-semibold font-mono">Upload Lesson Video (Cloudinary Store):</label>
+                    <input
+                      type="file"
+                      accept="video/mp4,video/*"
+                      onChange={(e) => handleFileSystemUploadSim(e, "video", setUploadedVideoUrl)}
+                      className="text-[10px] text-gray-500 block w-full"
+                    />
+                    {uploadedVideoUrl && (
+                      <div className="p-2 bg-[#1f242c] rounded border border-emerald-500/30 text-[9px] font-mono text-emerald-400 break-all select-all">
+                        <strong>Cloudinary Video Linked!</strong> Use this inside your JSON videoUrl keys:
+                        <input
+                          type="text"
+                          readOnly
+                          value={uploadedVideoUrl}
+                          className="w-full bg-[#0d1117] border border-[#30363d] p-1 mt-1 rounded text-[9.5px] text-[#ff7b00]"
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -1319,6 +1802,15 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
                     value={tutVideoUrl}
                     onChange={(e) => setTutVideoUrl(e.target.value)}
                     placeholder="Video Url"
+                    className="w-full bg-[#161b22] border border-[#30363d] text-[10px] rounded p-1 text-white mb-2"
+                  />
+
+                  <label className="text-[8px] text-gray-400 block font-bold">Embedded Video URL (YouTube embed, iframe, or .mp4 link):</label>
+                  <input
+                    type="text"
+                    value={tutEmbeddedVideoUrl}
+                    onChange={(e) => setTutEmbeddedVideoUrl(e.target.value)}
+                    placeholder="e.g. https://www.youtube.com/embed/Ke90Tje7VS0"
                     className="w-full bg-[#161b22] border border-[#30363d] text-[10px] rounded p-1 text-white"
                   />
                 </div>
@@ -2161,282 +2653,234 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
 
           {/* TAB 10: CONFIG SETTINGS PREFERENCES */}
           {activeAdminTab === "settings" && (
-            <form onSubmit={handleSavePlatformSettings} className="bg-[#161b22] border border-[#30363d] p-6 rounded-2xl max-w-lg mx-auto space-y-5" id="admin-platform-settings">
-              <h4 className="text-sm font-bold text-white border-b border-[#30363d] pb-2 flex items-center gap-2">
-                <Settings className="w-4 h-4 text-[#ff7b00]" />
-                GLOBAL PLATFORM PREFERENCES
-              </h4>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-5xl mx-auto items-start" id="admin-dual-settings-container">
+              
+              {/* GLOBAL PLATFORM PREFERENCES CARD */}
+              <form onSubmit={handleSavePlatformSettings} className="bg-[#161b22] border border-[#30363d] p-6 rounded-2xl space-y-5" id="admin-platform-settings">
+                <h4 className="text-sm font-bold text-white border-b border-[#30363d] pb-2 flex items-center gap-2">
+                  <Settings className="w-4 h-4 text-[#ff7b00]" />
+                  GLOBAL PLATFORM PREFERENCES
+                </h4>
 
-              <div className="space-y-1">
-                <label className="text-[11px] text-gray-400 uppercase font-bold">Academy Branding Label:</label>
-                <input
-                  type="text"
-                  value={platformName}
-                  onChange={(e) => setPlatformName(e.target.value)}
-                  className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg p-2 text-xs text-white outline-none"
-                />
-              </div>
-
-              <div className="flex justify-between items-center bg-[#0d1117] p-3.5 border border-[#30363d] rounded-xl">
-                <div>
-                  <span className="text-xs text-white font-bold block">Open Registration slots</span>
-                  <span className="text-[10px] text-gray-500 block">Controls whether guest students can self-register credentials accounts</span>
+                <div className="space-y-1">
+                  <label className="text-[11px] text-gray-400 uppercase font-bold">Academy Branding Label:</label>
+                  <input
+                    type="text"
+                    value={platformName}
+                    onChange={(e) => setPlatformName(e.target.value)}
+                    className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg p-2 text-xs text-white outline-none"
+                  />
                 </div>
-                <input
-                  type="checkbox"
-                  checked={enableRegistration}
-                  onChange={(e) => setEnableRegistration(e.target.checked)}
-                  className="accent-[#ff7b00] h-4 w-4"
-                />
-              </div>
 
-              <div className="space-y-1">
-                <label className="text-[11px] text-gray-400 uppercase font-bold">Site-wide Broadcaster banner alert:</label>
-                <textarea
-                  rows={2}
-                  value={landingPromoBanner}
-                  onChange={(e) => setLandingPromoBanner(e.target.value)}
-                  className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg p-2 text-xs text-white"
-                />
-              </div>
-
-              {settingsFeedback && (
-                <div className="text-xs font-mono font-bold text-green-400 bg-green-500/10 p-2 border border-green-500/20 rounded-lg">
-                  {settingsFeedback}
+                <div className="flex justify-between items-center bg-[#0d1117] p-3.5 border border-[#30363d] rounded-xl font-sans">
+                  <div>
+                    <span className="text-xs text-white font-bold block">Open Registration slots</span>
+                    <span className="text-[10px] text-gray-500 block">Controls whether guest students can self-register credentials accounts</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={enableRegistration}
+                    onChange={(e) => setEnableRegistration(e.target.checked)}
+                    className="accent-[#ff7b00] h-4 w-4"
+                  />
                 </div>
-              )}
 
-              <button type="submit" className="w-full bg-[#ff7b00] hover:bg-[#e66f00] text-sm text-white font-bold py-2 rounded-lg">
-                Commit Preference updates
-              </button>
-            </form>
+                <div className="space-y-1">
+                  <label className="text-[11px] text-gray-400 uppercase font-bold">Site-wide Broadcaster banner alert:</label>
+                  <textarea
+                    rows={2}
+                    value={landingPromoBanner}
+                    onChange={(e) => setLandingPromoBanner(e.target.value)}
+                    className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg p-2 text-xs text-white resize-none"
+                  />
+                </div>
+
+                {settingsFeedback && (
+                  <div className="text-xs font-mono font-bold text-green-400 bg-green-500/10 p-2 border border-green-500/20 rounded-lg">
+                    {settingsFeedback}
+                  </div>
+                )}
+
+                <button type="submit" className="w-full bg-[#ff7b00] hover:bg-[#e66f00] text-sm text-white font-bold py-2 rounded-lg cursor-pointer transition-colors shadow-md">
+                  Commit Preference updates
+                </button>
+              </form>
+
+              {/* DYNAMIC CERTIFICATE SETTINGS CARD */}
+              <CertificateSettings
+                user={user}
+                onViewCertificate={onViewCertificate}
+                dbStatus={dbStatus}
+              />
+
+              {/* ADMIN PROFILE & SECURITY SETTINGS */}
+              <div className="bg-[#161b22] border border-[#30363d] p-6 rounded-2xl space-y-5 lg:col-span-2" id="admin-profile-security-card">
+                <h4 className="text-sm font-bold text-white border-b border-[#30363d] pb-2 flex items-center gap-2">
+                  <Flame className="w-4 h-4 text-[#ff7b00]" />
+                  ADMIN SECURITY & PROFILE SETTINGS
+                </h4>
+
+                <div className="flex items-center gap-4 py-2">
+                  <img
+                    src={user.profile_picture_url || user.avatarUrl || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100"}
+                    className="w-16 h-16 rounded-full object-cover border-2 border-[#ff7b00]"
+                    referrerPolicy="no-referrer"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100";
+                    }}
+                  />
+                  <div>
+                    <span className="text-white font-bold text-sm block">{user.name}</span>
+                    <span className="text-xs text-gray-400 block font-mono">{user.email}</span>
+                    <span className="bg-[#ff7b00]/10 text-[#ff7b00] border border-[#ff7b00]/20 text-[9px] px-1.5 py-0.5 rounded font-bold mt-1 inline-block uppercase">Official Admin Seat</span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[11px] text-gray-400 uppercase font-bold">Upload Custom Profile Picture:</label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        setFeedback("Optimizing file details...");
+                        const reader = new FileReader();
+                        reader.onload = async () => {
+                          const optimizedBase64 = reader.result as string;
+                          try {
+                            const res = await fetch("/api/users/profile", {
+                              method: "POST",
+                              headers: {
+                                "Content-Type": "application/json",
+                                "Authorization": `Bearer ${user.email}`
+                              },
+                              body: JSON.stringify({ profile_picture_url: optimizedBase64 })
+                            });
+                            const data = await res.json();
+                            if (data.success) {
+                              setFeedback("✨ Profile picture updated successfully!");
+                              if (onUpdateUser) {
+                                onUpdateUser({ ...user, profile_picture_url: optimizedBase64 });
+                              }
+                              loadPlatformData();
+                            } else {
+                              setFeedback("❌ Failed to update profile image.");
+                            }
+                          } catch {
+                            setFeedback("❌ Network pipeline error.");
+                          }
+                        };
+                        reader.readAsDataURL(file);
+                      }}
+                      className="text-[10px] text-gray-500 block w-full bg-[#0d1117] border border-[#30363d] p-2 rounded-lg cursor-pointer"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[11px] text-gray-400 uppercase font-bold text-xs">Or Paste Profile Picture URL:</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="Paste image link here..."
+                        id="admin-profile-pic-link"
+                        className="flex-1 bg-[#0d1117] border border-[#30363d] rounded-lg p-2 text-xs text-white outline-none font-mono"
+                      />
+                      <button
+                        onClick={async () => {
+                          const linkVal = (document.getElementById("admin-profile-pic-link") as HTMLInputElement)?.value;
+                          if (!linkVal) return;
+                          setFeedback("Syncing picture link...");
+                          try {
+                            const res = await fetch("/api/users/profile", {
+                              method: "POST",
+                              headers: {
+                                "Content-Type": "application/json",
+                                "Authorization": `Bearer ${user.email}`
+                              },
+                              body: JSON.stringify({ profile_picture_url: linkVal })
+                            });
+                            const data = await res.json();
+                            if (data.success) {
+                              setFeedback("✨ Profile link configured!");
+                              if (onUpdateUser) {
+                                onUpdateUser({ ...user, profile_picture_url: linkVal });
+                              }
+                              loadPlatformData();
+                            }
+                          } catch {
+                            setFeedback("❌ Picture link failing.");
+                          }
+                        }}
+                        className="bg-[#21262d] text-white hover:bg-[#30363d] border border-[#30363d] text-xs font-bold px-3 rounded-lg"
+                      >
+                        Apply
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="border-t border-[#30363d] pt-4">
+                  {/* Password reset form */}
+                  <div className="space-y-2 max-w-md">
+                    <label className="text-[11px] text-gray-400 uppercase font-bold text-xs block">Update Admin Password:</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="password"
+                        placeholder="Enter secure new password..."
+                        id="admin-new-password-field"
+                        className="flex-1 bg-[#0d1117] border border-[#30363d] rounded-lg p-2 text-xs text-white outline-none font-mono"
+                      />
+                      <button
+                        onClick={async () => {
+                          const inputField = (document.getElementById("admin-new-password-field") as HTMLInputElement);
+                          const passVal = inputField?.value;
+                          if (!passVal) {
+                            alert("Please type a new password first.");
+                            return;
+                          }
+                          setFeedback("Committing credential password update...");
+                          try {
+                            const res = await fetch("/api/users/change-password", {
+                              method: "POST",
+                              headers: {
+                                "Content-Type": "application/json",
+                                "Authorization": `Bearer ${user.email}`
+                              },
+                              body: JSON.stringify({ newPassword: passVal })
+                            });
+                            const data = await res.json();
+                            if (data.success) {
+                              setFeedback("✨ Credentials password updated successfully! Please note it down.");
+                              inputField.value = "";
+                            } else {
+                              setFeedback(`❌ Error: ${data.error}`);
+                            }
+                          } catch {
+                            setFeedback("❌ Failed to update password.");
+                          }
+                        }}
+                        className="bg-[#ff7b00] hover:bg-[#e66f00] text-xs font-bold text-white px-4 py-2 rounded-lg cursor-pointer transition-colors shrink-0"
+                      >
+                        Change Password
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+            </div>
           )}
 
           {/* TAB 11: TRASH BIN CO-PILOT SYSTEM */}
           {activeAdminTab === "trash" && (
-            <div className="bg-[#161b22] border border-[#30363d] p-5 rounded-2xl space-y-4 font-sans" id="admin-trash-bin">
-              <div className="border-b border-[#30363d] pb-2 flex flex-col md:flex-row justify-between items-start md:items-center gap-3">
-                <div>
-                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                    <Trash className="w-4 h-4 text-red-500" />
-                    DELETED ARCHIVE CO-PILOT (TRASH BIN)
-                  </h4>
-                  <p className="text-[11px] text-gray-400 mt-0.5">Recover or permanently purge soft-deleted academy curricula.</p>
-                </div>
-              </div>
+            <TrashManager user={user} loadPlatformData={loadPlatformData} setFeedback={setFeedback} triggerToast={showToast} />
+          )}
 
-              {(() => {
-                // Gather all trash items
-                const coursesTrash = adminCourses.filter(c => c.isDeleted === true).map(c => ({ id: c.id, title: c.title, contentType: "COURSE" as const }));
-                const tutorialsTrash = adminTutorials.filter(t => t.isDeleted === true).map(t => ({ id: t.id, title: t.title, contentType: "TUTORIAL" as const }));
-                const pdfsTrash = adminPdfs.filter(p => p.isDeleted === true).map(p => ({ id: p.id, title: p.title, contentType: "PDF" as const }));
-                const challengesTrash = adminChallenges.filter(c => c.isDeleted === true).map(c => ({ id: c.id, title: c.title, contentType: "CHALLENGE" as const }));
-                const announcementsTrash = adminAnnouncements.filter(a => a.isDeleted === true).map(a => ({ id: a.id, title: a.title, contentType: "ANNOUNCEMENT" as const }));
-
-                const fullTrashList = [
-                  ...coursesTrash,
-                  ...tutorialsTrash,
-                  ...pdfsTrash,
-                  ...challengesTrash,
-                  ...announcementsTrash
-                ];
-
-                const [trashSelection, setTrashSelection] = useState<{ id: number; contentType: "COURSE" | "TUTORIAL" | "PDF" | "CHALLENGE" | "ANNOUNCEMENT" }[]>([]);
-                const [filterType, setFilterType] = useState<string>("ALL");
-
-                const filteredTrashList = filterType === "ALL" 
-                  ? fullTrashList 
-                  : fullTrashList.filter(item => item.contentType === filterType);
-
-                const handleToggleTrashItem = (id: number, contentType: "COURSE" | "TUTORIAL" | "PDF" | "CHALLENGE" | "ANNOUNCEMENT") => {
-                  const exists = trashSelection.some(x => x.id === id && x.contentType === contentType);
-                  if (exists) {
-                    setTrashSelection(trashSelection.filter(x => !(x.id === id && x.contentType === contentType)));
-                  } else {
-                    setTrashSelection([...trashSelection, { id, contentType }]);
-                  }
-                };
-
-                const handleBulkRestore = async () => {
-                  if (trashSelection.length === 0) {
-                    alert("Please select at least one trash item to restore.");
-                    return;
-                  }
-                  if (!confirm(`Are you sure you want to restore ${trashSelection.length} selected items?`)) return;
-
-                  setFeedback(`Restoring ${trashSelection.length} items...`);
-                  try {
-                    // Group by type for easier API processing
-                    const typeGroups = trashSelection.reduce((acc, current) => {
-                      if (!acc[current.contentType]) acc[current.contentType] = [];
-                      acc[current.contentType].push(current.id);
-                      return acc;
-                    }, {} as Record<string, number[]>);
-
-                    for (const [cType, ids] of Object.entries(typeGroups)) {
-                      await fetch("/api/admin/bulk", {
-                        method: "POST",
-                        headers: {
-                          "Content-Type": "application/json",
-                          "Authorization": `Bearer ${user.email}`
-                        },
-                        body: JSON.stringify({ contentType: cType, action: "restore", ids })
-                      });
-                    }
-
-                    setFeedback("✅ Selected items successfully restored!");
-                    setTrashSelection([]);
-                    loadPlatformData();
-                  } catch {
-                    setFeedback("❌ Failed to complete restoration operations.");
-                  }
-                };
-
-                const handleBulkPermanentDelete = async () => {
-                  if (trashSelection.length === 0) {
-                    alert("Please select at least one item to completely expunge.");
-                    return;
-                  }
-                  if (!confirm(`CRITICAL: Are you sure you want to PERMANENTLY and IRREVERSIBLY erase ${trashSelection.length} selected items? This action cannot be undone.`)) return;
-
-                  setFeedback(`Purging ${trashSelection.length} items...`);
-                  try {
-                    const typeGroups = trashSelection.reduce((acc, current) => {
-                      if (!acc[current.contentType]) acc[current.contentType] = [];
-                      acc[current.contentType].push(current.id);
-                      return acc;
-                    }, {} as Record<string, number[]>);
-
-                    for (const [cType, ids] of Object.entries(typeGroups)) {
-                      await fetch("/api/admin/bulk", {
-                        method: "POST",
-                        headers: {
-                          "Content-Type": "application/json",
-                          "Authorization": `Bearer ${user.email}`
-                        },
-                        body: JSON.stringify({ contentType: cType, action: "permanent_delete", ids })
-                      });
-                    }
-
-                    setFeedback("✅ Selected items permanently destroyed!");
-                    setTrashSelection([]);
-                    loadPlatformData();
-                  } catch {
-                    setFeedback("❌ Complete deletion operations failed.");
-                  }
-                };
-
-                return (
-                  <div className="space-y-4">
-                    {/* Filters and Action Buttons Header */}
-                    <div className="flex flex-wrap items-center justify-between gap-3 bg-[#0d1117] p-3 rounded-xl border border-[#30363d]">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] text-gray-400 font-bold uppercase">Filter:</span>
-                        <select 
-                          value={filterType}
-                          onChange={(e) => setFilterType(e.target.value)}
-                          className="bg-[#161b22] border border-[#30363d] text-xs text-white rounded p-1 outline-none font-sans"
-                        >
-                          <option value="ALL">All Categories</option>
-                          <option value="COURSE">Courses</option>
-                          <option value="TUTORIAL">Tutorials</option>
-                          <option value="PDF">PDF Books</option>
-                          <option value="CHALLENGE">Challenges</option>
-                          <option value="ANNOUNCEMENT">Announcements</option>
-                        </select>
-                      </div>
-
-                      <div className="flex gap-2">
-                        <button 
-                          onClick={handleBulkRestore}
-                          disabled={trashSelection.length === 0}
-                          className="px-3 py-1.5 bg-green-500/15 hover:bg-green-500/25 text-green-400 rounded-lg text-xs font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                          Restore Selected ({trashSelection.length})
-                        </button>
-                        <button 
-                          onClick={handleBulkPermanentDelete}
-                          disabled={trashSelection.length === 0}
-                          className="px-3 py-1.5 bg-red-400 border border-red-500/20 bg-red-500/15 hover:bg-red-500/25 text-red-400 rounded-lg text-xs font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                          Purge Selected ({trashSelection.length})
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* Trash contents */}
-                    {filteredTrashList.length === 0 ? (
-                      <div className="text-center py-6 text-gray-400 text-xs font-sans">
-                        No soft-deleted content found inside the Trash Bin system.
-                      </div>
-                    ) : (
-                      <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1">
-                        {filteredTrashList.map((item, index) => {
-                          const isSelected = trashSelection.some(x => x.id === item.id && x.contentType === item.contentType);
-                          return (
-                            <div key={`${item.contentType}-${item.id}`} className="p-3 bg-[#0d1117] border border-[#21262d] rounded-xl flex items-center justify-between text-xs font-sans">
-                              <div className="flex items-center gap-3">
-                                <input 
-                                  type="checkbox"
-                                  checked={isSelected}
-                                  onChange={() => handleToggleTrashItem(item.id, item.contentType)}
-                                  className="accent-[#ff7b00]"
-                                />
-                                <div>
-                                  <h5 className="font-bold text-white flex items-center gap-2">
-                                    <span>{item.title}</span>
-                                    <span className="bg-[#21262d] text-gray-400 font-mono text-[9px] px-1 py-0.5 rounded">ID: {item.id}</span>
-                                  </h5>
-                                  <span className="text-[9px] bg-red-500/10 text-red-500 border border-red-500/10 px-1.5 py-0.5 rounded mt-1 inline-block uppercase font-bold tracking-wider">
-                                    {item.contentType}
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="flex gap-1.5">
-                                <button 
-                                  onClick={async () => {
-                                    if (!confirm(`Are you sure you want to restore this ${item.contentType.toLowerCase()}?`)) return;
-                                    await fetch("/api/admin/bulk", {
-                                      method: "POST",
-                                      headers: {
-                                        "Content-Type": "application/json",
-                                        "Authorization": `Bearer ${user.email}`
-                                      },
-                                      body: JSON.stringify({ contentType: item.contentType, action: "restore", ids: [item.id] })
-                                    });
-                                    loadPlatformData();
-                                  }}
-                                  className="px-2 py-1 bg-green-500/10 text-green-400 hover:bg-green-500/20 text-[10px] font-bold rounded"
-                                >
-                                  Restore
-                                </button>
-                                <button 
-                                  onClick={async () => {
-                                    if (!confirm(`CRITICAL WARNING: Permanently destroy this ${item.contentType.toLowerCase()}? This cannot be undone.`)) return;
-                                    await fetch("/api/admin/bulk", {
-                                      method: "POST",
-                                      headers: {
-                                        "Content-Type": "application/json",
-                                        "Authorization": `Bearer ${user.email}`
-                                      },
-                                      body: JSON.stringify({ contentType: item.contentType, action: "permanent_delete", ids: [item.id] })
-                                    });
-                                    loadPlatformData();
-                                  }}
-                                  className="px-2 py-1 bg-red-500/10 text-red-400 hover:bg-red-500/20 text-[10px] font-bold rounded"
-                                >
-                                  Purge
-                                </button>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-            </div>
+          {/* TAB media: CONTENT MEDIA MANAGER */}
+          {activeAdminTab === "media" && (
+            <ContentMediaManager user={user} setFeedback={setFeedback} triggerToast={showToast} />
           )}
 
           {/* TAB 12: ADMINISTRATIVE AUDIT LOGS MONITOR */}
@@ -2484,6 +2928,758 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* TAB 13: POWERFUL MOBILE MONEY PAYMENTS AUDITING & APPROVAL CONTROL CENTRE */}
+          {activeAdminTab === "purchases" && (
+            <div className="bg-[#161b22] border border-[#30363d] p-5 rounded-2xl space-y-4 font-sans animate-fade-in" id="admin-purchases-tab">
+              <div className="border-b border-[#30363d] pb-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Landmark className="w-4 h-4 text-emerald-400 animate-pulse" />
+                    MOBILE MONEY PAYMENTS APPROVAL DASHBOARD
+                  </h4>
+                  <p className="text-xs text-gray-400 mt-1">Verify screenshot proofs, crosscheck references, and approve courses/premium subscriptions.</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <span className="text-xs bg-amber-500/10 text-amber-400 font-mono px-2.5 py-1 rounded-lg border border-amber-500/20">
+                    Pending Verification: {adminPaymentRequests.filter(p => p.status === "PENDING_APPROVAL" || p.status === "PENDING").length}
+                  </span>
+                  <span className="text-xs bg-[#1f242c] text-emerald-400 font-mono px-2.5 py-1 rounded-lg border border-[#30363d]">
+                    Approved: {adminPaymentRequests.filter(p => p.status === "APPROVED").length}
+                  </span>
+                </div>
+              </div>
+
+              {/* Filtering & Search Row */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 bg-[#0d1117] p-3 rounded-xl border border-[#21262d]">
+                <div className="md:col-span-2">
+                  <input
+                    type="text"
+                    value={paymentQuery}
+                    onChange={(e) => setPaymentQuery(e.target.value)}
+                    placeholder="Search by student name, email, transaction phone, reference code..."
+                    className="w-full bg-[#161b22] border border-[#30363d] rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#ff7b00]"
+                  />
+                </div>
+                <div>
+                  <select
+                    value={paymentStatusFilter}
+                    onChange={(e) => setPaymentStatusFilter(e.target.value)}
+                    className="w-full bg-[#161b22] border border-[#30363d] rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none"
+                  >
+                    <option value="ALL">All Statuses</option>
+                    <option value="PENDING">Pending / Processing</option>
+                    <option value="APPROVED">Approved</option>
+                    <option value="REJECTED">Rejected</option>
+                  </select>
+                </div>
+              </div>
+
+              {(() => {
+                const filtered = adminPaymentRequests.filter(p => {
+                  const statusMatch = paymentStatusFilter === "ALL" || 
+                    (paymentStatusFilter === "PENDING" && (p.status === "PENDING" || p.status === "PENDING_APPROVAL")) ||
+                    p.status === paymentStatusFilter;
+
+                  if (!statusMatch) return false;
+
+                  if (paymentQuery) {
+                    const q = paymentQuery.toLowerCase();
+                    const name = (p.userName || "").toLowerCase();
+                    const email = (p.userEmail || "").toLowerCase();
+                    const phone = (p.phone || "").toLowerCase();
+                    const content = (p.contentTitle || "").toLowerCase();
+                    const code = (p.referenceCode || p.refCode || "").toLowerCase();
+                    const provider = (p.provider || p.paymentMethod || "").toLowerCase();
+                    return name.includes(q) || email.includes(q) || phone.includes(q) || content.includes(q) || code.includes(q) || provider.includes(q);
+                  }
+                  return true;
+                });
+
+                if (filtered.length === 0) {
+                  return (
+                    <div className="text-center py-12 border border-dashed border-[#30363d] rounded-2xl text-xs text-slate-500 font-mono">
+                      No matching payment requests found.
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="overflow-x-auto rounded-xl border border-[#30363d]">
+                    <table className="w-full text-left text-xs text-slate-300">
+                      <thead className="bg-[#0d1117] text-gray-400 uppercase text-[10px] tracking-wider border-b border-[#30363d]">
+                        <tr>
+                          <th className="p-3">Student / Batch Info</th>
+                          <th className="p-3">Reference Details</th>
+                          <th className="p-3">Provider</th>
+                          <th className="p-3">Item / Subscription</th>
+                          <th className="p-3">Amount</th>
+                          <th className="p-3">Status</th>
+                          <th className="p-3 text-right">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#30363d]">
+                        {filtered.map((p) => (
+                          <React.Fragment key={p.id}>
+                            <tr className="hover:bg-[#1f242c] transition-colors">
+                              <td className="p-3">
+                                <div className="font-semibold text-white">{p.userName || "Student Recipient"}</div>
+                                <div className="text-[10px] text-[#8b949e] font-mono">{p.userEmail}</div>
+                                <div className="text-[9px] text-gray-500 mt-0.5">
+                                  {new Date(p.createdAt).toLocaleString()}
+                                </div>
+                              </td>
+                              <td className="p-3 font-mono">
+                                <div className="text-white text-xs">{p.phone}</div>
+                                {p.referenceCode && (
+                                  <div className="text-[10px] text-orange-400 font-bold uppercase mt-0.5" title="Transaction ID">
+                                    MOMO ID: {p.referenceCode}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="p-3">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase ${
+                                  (p.provider || p.paymentMethod) === "MTN" 
+                                    ? "bg-yellow-500/10 text-yellow-300 border border-yellow-500/20" 
+                                    : "bg-red-500/10 text-red-300 border border-red-500/20"
+                                }`}>
+                                  {p.provider || p.paymentMethod || "MTN"}
+                                </span>
+                              </td>
+                              <td className="p-3 max-w-[200px] truncate">
+                                <span className="font-bold text-gray-200 block truncate" title={p.contentTitle}>
+                                  {p.contentTitle || "Premium Subscription License"}
+                                </span>
+                                <span className="text-[9px] text-gray-500 uppercase">{p.contentType}</span>
+                              </td>
+                              <td className="p-3 font-mono text-emerald-400 font-bold">
+                                UGX {Number(p.amountPaid || p.amount || 15000).toLocaleString()}
+                              </td>
+                              <td className="p-3">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  p.status === "APPROVED" ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 font-bold" :
+                                  p.status === "REJECTED" ? "bg-red-500/15 text-red-400 border border-red-500/30" :
+                                  "bg-amber-500/15 text-amber-400 border border-amber-500/30 animate-pulse"
+                                }`}>
+                                  {p.status}
+                                </span>
+                              </td>
+                              <td className="p-3 text-right">
+                                <div className="flex items-center justify-end gap-1.5">
+                                  {p.proofUrl && (
+                                    <a
+                                      href={p.proofUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="bg-[#21262d] hover:bg-slate-700 text-slate-300 hover:text-white px-2 py-1 rounded text-[10px] font-mono transition-colors border border-[#30363d]"
+                                    >
+                                      Preview Proof
+                                    </a>
+                                  )}
+                                  
+                                  {(p.status === "PENDING" || p.status === "PENDING_APPROVAL") && (
+                                    <>
+                                      <button
+                                        onClick={async () => {
+                                          if (!confirm(`Are you sure you want to APPROVED payment for "${p.contentTitle}"? This will instantly trigger an in-app and push notification to the student.`)) return;
+                                          try {
+                                            const res = await fetch(`/api/payments/${p.id}/approve`, {
+                                              method: "PUT",
+                                              headers: {
+                                                "Content-Type": "application/json",
+                                                "Authorization": `Bearer ${user.email}`
+                                              }
+                                            });
+                                            const resData = await res.json();
+                                            if (resData.success) {
+                                              setFeedback(`✅ Verified! Payment approved and premium access unlocked for ${p.userName}.`);
+                                              loadPlatformData();
+                                            } else {
+                                              alert(resData.error || "Approval request failed.");
+                                            }
+                                          } catch (err: any) {
+                                            alert(err.message || "Network exception.");
+                                          }
+                                        }}
+                                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-2 py-1 rounded text-[10px]"
+                                      >
+                                        Verify Approve
+                                      </button>
+                                      
+                                      <button
+                                        onClick={() => {
+                                          setRejectId(p.id);
+                                          setRejectExplanation("");
+                                        }}
+                                        className="bg-red-600 hover:bg-red-700 text-white font-bold px-2 py-1 rounded text-[10px]"
+                                      >
+                                        Reject
+                                      </button>
+                                    </>
+                                  )}
+
+                                  <button
+                                    onClick={() => {
+                                      openDeleteConfirmation(
+                                        "Move Payment Request to Trash?",
+                                        "Are you sure you want to move this request to the Trash Bin (Soft Delete)?",
+                                        async () => {
+                                          const res = await fetch(`/api/payments/${p.id}`, {
+                                            method: "DELETE",
+                                            headers: {
+                                              "Authorization": `Bearer ${user.email}`
+                                            }
+                                          });
+                                          const resData = await res.json();
+                                          if (!resData.success) {
+                                            throw new Error(resData.error || "Failed to move payment request to trash");
+                                          }
+                                          setAdminPaymentRequests(prev => prev.filter(req => req.id !== p.id));
+                                          showToast("Payment request moved to the trash archive! 🧹", "success");
+                                          loadPlatformData();
+                                        }
+                                      );
+                                    }}
+                                    className="bg-transparent hover:bg-slate-800 text-slate-500 hover:text-red-400 p-1 rounded"
+                                    title="Move to trash"
+                                  >
+                                    <Trash className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+
+                            {/* REJECTION FORM DRAWER ROW */}
+                            {rejectId === p.id && (
+                              <tr>
+                                <td colSpan={7} className="p-4 bg-[#0d1117] border border-red-500/20 rounded-b-xl">
+                                  <div className="space-y-3 max-w-xl">
+                                    <label className="block text-xs font-bold text-red-400 uppercase">
+                                      Specify Rejection Reason (Dispatched to Student Notification Feed):
+                                    </label>
+                                    <textarea
+                                      value={rejectExplanation}
+                                      onChange={(e) => setRejectExplanation(e.target.value)}
+                                      placeholder="e.g. Uploaded screenshot is blurred/blank. Or the Mobile Money reference ID does not exist in our systems. Please re-submit."
+                                      className="w-full bg-[#161b22] border border-[#30363d] p-3 rounded-lg text-xs text-white placeholder-slate-600 focus:outline-none focus:border-red-500 h-20 font-sans"
+                                    />
+                                    <div className="flex gap-2">
+                                      <button
+                                        onClick={async () => {
+                                          if (!rejectExplanation.trim()) {
+                                            alert("Please enter an explanation of rejection for the student first!");
+                                            return;
+                                          }
+                                          try {
+                                            const res = await fetch(`/api/payments/${p.id}/reject`, {
+                                              method: "PUT",
+                                              headers: {
+                                                "Content-Type": "application/json",
+                                                "Authorization": `Bearer ${user.email}`
+                                              },
+                                              body: JSON.stringify({ reason: rejectExplanation })
+                                            });
+                                            const resData = await res.json();
+                                            if (resData.success) {
+                                              setFeedback(`❌ Marked! Transaction rejected. Feedback sent to ${p.userEmail}.`);
+                                              setRejectId(null);
+                                              setRejectExplanation("");
+                                              loadPlatformData();
+                                            } else {
+                                              alert(resData.error || "Rejection endpoint failed");
+                                            }
+                                          } catch (err: any) {
+                                            alert(err.message);
+                                          }
+                                        }}
+                                        className="bg-red-600 hover:bg-red-700 text-white font-bold px-3 py-1.5 rounded text-xs"
+                                      >
+                                        Confirm Rejection
+                                      </button>
+                                      <button
+                                        onClick={() => {
+                                          setRejectId(null);
+                                          setRejectExplanation("");
+                                        }}
+                                        className="bg-transparent hover:bg-slate-800 text-slate-400 font-sans px-3 py-1.5 rounded text-xs border border-[#30363d]"
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
+            </div>
+          )}
+
+          {/* TAB 14: ADMIN NOTIFICATION SOUNDS CONTROLLER */}
+          {activeAdminTab === "sounds" && (
+            <div className="bg-[#161b22] border border-[#30363d] p-5 rounded-2xl space-y-4 font-sans animate-fade-in" id="admin-sounds-tab">
+              <div className="border-b border-[#30363d] pb-4">
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Megaphone className="w-5 h-5 text-orange-400" />
+                  <span>Notification Alert Sounds Controller</span>
+                </h3>
+                <p className="text-xs text-[#8b949e]">
+                  Upload custom audio files (MP3, WAV, OGG) to play during student milestones, checkouts, warning alerts, and grade notifications.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                
+                {/* Sound Upload & Customization console */}
+                <div className="bg-[#0d1117] border border-[#21262d] p-5 rounded-xl space-y-4">
+                  <h4 className="text-xs font-bold text-[#ff7b00] uppercase font-mono tracking-wider">
+                    Configure Custom Audio Alert
+                  </h4>
+
+                  <div className="space-y-3">
+                    <div>
+                      <label className="text-[10px] text-gray-400 uppercase font-bold block font-mono mb-1.5">
+                        1. Select Alert Type Channels
+                      </label>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                        {["success", "info", "warning", "error"].map((type) => (
+                          <button
+                            key={type}
+                            type="button"
+                            onClick={() => {
+                              setAdminSelectedAlertType(type);
+                              const existing = notificationSoundsList.find((s) => s.alertType === type);
+                              setCustomSoundUploadUrl(existing?.url || "");
+                              setCustomSoundFileLabel(existing?.fileName || "");
+                            }}
+                            className={`py-2 px-1 rounded-lg text-[10.5px] font-bold uppercase transition-all tracking-wide text-center cursor-pointer border ${
+                              adminSelectedAlertType === type
+                                ? type === "success" ? "bg-green-500/15 text-green-400 border-green-500/40"
+                                  : type === "info" ? "bg-blue-500/15 text-blue-400 border-blue-500/40"
+                                  : type === "warning" ? "bg-amber-500/15 text-amber-400 border-amber-500/40"
+                                  : "bg-red-500/15 text-red-500 border-red-500/40"
+                                : "bg-[#161b22] text-[#8b949e] border-[#30363d] hover:text-white"
+                            }`}
+                          >
+                            {type}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] text-gray-400 uppercase font-bold block font-mono mb-1.5">
+                        2. Upload Audio Track
+                      </label>
+                      
+                      <div className="space-y-2">
+                        <label className="border border-dashed border-[#ff7b00]/30 hover:border-[#ff7b00]/60 bg-[#161b22]/50 hover:bg-[#161b22] py-4 px-3 rounded-lg flex flex-col items-center justify-center cursor-pointer transition-all text-center">
+                          <Upload className="w-6 h-6 text-[#ff7b00] mb-2 shrink-0" />
+                          <span className="text-[11px] font-bold text-[#ff7b00] uppercase tracking-wider">Choose Computer Sound File</span>
+                          <span className="text-[9px] text-gray-500 font-mono mt-1">MP3 / WAV / OGG</span>
+                          <input
+                            type="file"
+                            accept="audio/*"
+                            className="hidden"
+                            onChange={async (e) => {
+                              if (e.target.files && e.target.files[0]) {
+                                const file = e.target.files[0];
+                                setCustomSoundFileLabel(file.name);
+                                setFeedback(`Reading local sound file ${file.name}...`);
+                                const reader = new FileReader();
+                                reader.onload = async (event) => {
+                                  const fileUrl = event.target?.result as string;
+                                  if (fileUrl) {
+                                    setCustomSoundUploadUrl(fileUrl);
+                                    setFeedback(`✅ Finished reading track: ${file.name}. Click Preview Chime to listen!`);
+                                    setTimeout(() => setFeedback(""), 4000);
+                                  }
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                          />
+                        </label>
+
+                        {/* Or direct simulation box link */}
+                        <div className="pt-2">
+                          <span className="text-[9px] text-[#8b949e] uppercase font-bold block mb-1">Or Paste Direct Audio Endpoint URL:</span>
+                          <input
+                            type="text"
+                            placeholder="https://example.com/chime.mp3"
+                            value={customSoundUploadUrl}
+                            onChange={(e) => {
+                              setCustomSoundUploadUrl(e.target.value);
+                              if (e.target.value && !customSoundFileLabel) {
+                                setCustomSoundFileLabel("External Audio URL");
+                              }
+                            }}
+                            className="w-full bg-[#161b22] border border-[#30363d] rounded-lg p-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-[#ff7b00]"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {customSoundUploadUrl && (
+                      <div className="bg-[#161b22] border border-[#30363d] p-3 rounded-xl space-y-2.5">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-[10px] text-[#8b949e] font-mono break-all max-w-[70%]">
+                            Track: {customSoundFileLabel || "custom_audio.mp3"}
+                          </span>
+                          <span className="text-[9px] bg-[#ff7b00]/15 text-[#ff7b00] px-1.5 py-0.5 rounded font-bold uppercase font-mono">
+                            READY TO TEST
+                          </span>
+                        </div>
+
+                        {/* Interactive Preview Speaker */}
+                        <div className="flex gap-2">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (!customSoundUploadUrl) return;
+                              setFeedback("🔊 Auditing custom alert playback track...");
+                              try {
+                                const audioObj = new Audio(customSoundUploadUrl);
+                                audioObj.volume = 0.8;
+                                audioObj.play().catch((err) => {
+                                  console.warn("Audio Context error, falling back to Web Audio API synthesis:", err);
+                                  // Fallback to Web Audio synthesis beep since some browser sandboxes deny Base64 audio tags
+                                  const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+                                  if (AudioContextClass) {
+                                    const ctx = new AudioContextClass();
+                                    const osc = ctx.createOscillator();
+                                    const gain = ctx.createGain();
+                                    osc.connect(gain);
+                                    gain.connect(ctx.destination);
+                                    osc.frequency.setValueAtTime(adminSelectedAlertType === "success" ? 880 : 440, ctx.currentTime);
+                                    gain.gain.setValueAtTime(0.12, ctx.currentTime);
+                                    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+                                    osc.start(ctx.currentTime);
+                                    osc.stop(ctx.currentTime + 0.4);
+                                  }
+                                });
+                              } catch (e) {
+                                console.warn(e);
+                              }
+                              setTimeout(() => setFeedback(""), 3555);
+                            }}
+                            className="w-full bg-[#1c2128] hover:bg-[#2d333b] border border-[#30363d] text-white font-bold py-2 px-3 rounded-lg text-xs flex items-center justify-center gap-1.5 cursor-pointer"
+                          >
+                            <span>🔊 PREVIEW AUDIBLE CHIME</span>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="pt-2 border-t border-[#21262d] flex justify-end">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!customSoundUploadUrl) {
+                            alert("Please select or upload an alert audio file first!");
+                            return;
+                          }
+                          try {
+                            setFeedback("Saving customized sound configuration...");
+                            const res = await fetch("/api/notifications/sounds", {
+                              method: "POST",
+                              headers: {
+                                "Content-Type": "application/json",
+                                "Authorization": `Bearer ${user.email}`
+                              },
+                              body: JSON.stringify({
+                                alertType: adminSelectedAlertType,
+                                url: customSoundUploadUrl,
+                                fileName: customSoundFileLabel || `custom_${adminSelectedAlertType}.mp3`
+                              })
+                            });
+                            const data = await res.json();
+                            if (data.success) {
+                              setFeedback(`✨ Success! Custom sound configured for alert [${adminSelectedAlertType}].`);
+                              // Refresh sounds
+                              loadPlatformData();
+                            } else {
+                              alert(`Error: ${data.error}`);
+                            }
+                          } catch (err: any) {
+                            alert(`Network failed: ${err.message}`);
+                          }
+                        }}
+                        className="bg-[#2ea44f] hover:bg-[#2c974b] text-white font-bold text-xs px-4 py-2 rounded-lg cursor-pointer flex items-center gap-1"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        Save Chime Sound
+                      </button>
+                    </div>
+
+                  </div>
+                </div>
+
+                {/* Sounds listing desk */}
+                <div className="bg-[#0d1117] border border-[#21262d] p-5 rounded-xl space-y-4 flex flex-col justify-between">
+                  <div>
+                    <h4 className="text-xs font-bold text-white uppercase font-mono tracking-wider mb-2">
+                      Active Sound Settings Registries
+                    </h4>
+                    <p className="text-[10px] text-gray-500 mb-4">
+                      The core triggers look for custom files below. If empty, the high-fidelity sound synthesizer fallback handles alert playback immediately.
+                    </p>
+
+                    <div className="space-y-2">
+                      {["success", "info", "warning", "error"].map((type) => {
+                        const boundSound = notificationSoundsList.find((s) => s.alertType === type);
+                        return (
+                          <div
+                            key={type}
+                            className="bg-[#161b22] border border-[#30363d] p-3 rounded-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase font-mono ${
+                                type === "success" ? "bg-green-500/10 text-green-400"
+                                  : type === "info" ? "bg-blue-500/10 text-blue-400"
+                                  : type === "warning" ? "bg-amber-500/10 text-amber-500"
+                                  : "bg-red-500/10 text-red-500"
+                              }`}>
+                                {type}
+                              </span>
+                              <span className="text-[#8b949e] max-w-[150px] truncate font-mono text-[10.5px]">
+                                {boundSound ? boundSound.fileName : "Synthesizer Fallback"}
+                              </span>
+                            </div>
+
+                            {boundSound ? (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  try {
+                                    const audioObj = new Audio(boundSound.url);
+                                    audioObj.volume = 0.8;
+                                    audioObj.play().catch(() => {
+                                      // synthesis fallback
+                                      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+                                      if (AudioContextClass) {
+                                        const ctx = new AudioContextClass();
+                                        const osc = ctx.createOscillator();
+                                        const gain = ctx.createGain();
+                                        osc.connect(gain);
+                                        gain.connect(ctx.destination);
+                                        osc.frequency.setValueAtTime(type === "success" ? 880 : 440, ctx.currentTime);
+                                        gain.gain.setValueAtTime(0.12, ctx.currentTime);
+                                        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+                                        osc.start(ctx.currentTime);
+                                        osc.stop(ctx.currentTime + 0.4);
+                                      }
+                                    });
+                                  } catch (_) {}
+                                }}
+                                className="bg-[#21262d] hover:bg-[#30363d] text-slate-200 py-1 px-2.5 rounded border border-[#30363d] text-[10px] font-bold cursor-pointer transition-all flex items-center gap-1"
+                              >
+                                <span>🔊 Play Chime</span>
+                              </button>
+                            ) : (
+                              <span className="text-[10px] text-gray-600 font-mono italic">Offline Default</span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="mt-4 p-3 bg-blue-500/5 border border-blue-500/10 rounded-xl text-[10px] text-blue-400/80 leading-relaxed font-sans font-normal">
+                    💡 **Play-it note:** Synthesizer triggers fallback dynamically inside client sessions if Base64 payloads are too heavy for low bandwidth connections.
+                  </div>
+
+                </div>
+
+              </div>
+            </div>
+          )}
+
+          {/* TAB 15: ADMIN TRANSACTION HISTORY AUDIT LEDGER */}
+          {activeAdminTab === "transactions" && (
+            <div className="bg-[#161b22] border border-[#30363d] p-5 rounded-2xl space-y-4 font-sans animate-fade-in" id="admin-transactions-tab">
+              <div className="border-b border-[#30363d] pb-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                  <h3 className="text-base font-bold text-white flex items-center gap-2">
+                    <Landmark className="w-5 h-5 text-[#ff7b00]" />
+                    <span>Administrative Transaction History Ledger</span>
+                  </h3>
+                  <p className="text-xs text-[#8b949e]">
+                    Direct historical data from the 'transactions' table including MoMo references, success statuses, student records, and purchase metadata.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    loadPlatformData();
+                    setFeedback("🔄 Transaction ledger synchronized successfully!");
+                    setTimeout(() => setFeedback(""), 3000);
+                  }}
+                  className="bg-[#21262d] hover:bg-[#30363d] text-white border border-[#30363d] text-xs font-bold py-1.5 px-3 rounded-lg flex items-center gap-1 cursor-pointer transition-colors"
+                >
+                  <span>🔄 Refresh Logs</span>
+                </button>
+              </div>
+
+              {/* Statistical insights headers */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="bg-[#0d1117] border border-[#21262d] p-3 rounded-xl">
+                  <span className="text-[10px] text-gray-500 uppercase font-mono font-bold block">Aggregated Revenue (SUCCESS)</span>
+                  <div className="text-lg font-extrabold text-green-400 mt-1 font-mono">
+                    {adminTransactions.filter(t => t.status === "SUCCESS" || t.status === "APPROVED").reduce((sum, current) => sum + (Number(current.amount) || 0), 0).toLocaleString()} UGX
+                  </div>
+                </div>
+                <div className="bg-[#0d1117] border border-[#21262d] p-3 rounded-xl">
+                  <span className="text-[10px] text-gray-500 uppercase font-mono font-bold block">Settled Transactions Count</span>
+                  <div className="text-lg font-extrabold text-white mt-1 font-mono">
+                    {adminTransactions.filter(t => t.status === "SUCCESS" || t.status === "APPROVED").length} / {adminTransactions.length}
+                  </div>
+                </div>
+                <div className="bg-[#0d1117] border border-[#21262d] p-3 rounded-xl">
+                  <span className="text-[10px] text-gray-500 uppercase font-mono font-bold block">Pending Escrow</span>
+                  <div className="text-lg font-extrabold text-amber-500 mt-1 font-mono">
+                    {adminTransactions.filter(t => t.status === "PENDING").reduce((sum, current) => sum + (Number(current.amount) || 0), 0).toLocaleString()} UGX
+                  </div>
+                </div>
+              </div>
+
+              {/* Filtering console */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-[#0d1117] p-3 rounded-xl border border-[#21262d]">
+                <div className="sm:col-span-2">
+                  <label className="text-[9px] uppercase font-bold text-[#8b949e] font-mono block mb-1">Search student, content, or reference</label>
+                  <input
+                    type="text"
+                    value={txFilterQuery}
+                    onChange={(e) => setTxFilterQuery(e.target.value)}
+                    placeholder="Type name, email, item title, or phone reference..."
+                    className="w-full bg-[#161b22] border border-[#30363d] rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#ff7b00]"
+                  />
+                </div>
+                <div>
+                  <label className="text-[9px] uppercase font-bold text-[#8b949e] font-mono block mb-1">Settle Status Filter</label>
+                  <select
+                    value={txFilterStatus}
+                    onChange={(e) => setTxFilterStatus(e.target.value)}
+                    className="w-full bg-[#161b22] border border-[#30363d] rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-[#ff7b00]"
+                  >
+                    <option value="ALL">All Statuses</option>
+                    <option value="SUCCESS">Success Only</option>
+                    <option value="PENDING">Pending Only</option>
+                    <option value="FAILED">Failed/Rejected</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Render dynamic list */}
+              {(() => {
+                const filtered = adminTransactions.filter(t => {
+                  const matchesStatus =
+                    txFilterStatus === "ALL" ||
+                    (txFilterStatus === "SUCCESS" && (t.status === "SUCCESS" || t.status === "APPROVED")) ||
+                    (txFilterStatus === "PENDING" && t.status === "PENDING") ||
+                    (txFilterStatus === "FAILED" && (t.status === "FAILED" || t.status === "REJECTED"));
+
+                  const q = txFilterQuery.toLowerCase();
+                  const matchesSearch =
+                    !q ||
+                    (t.id && t.id.toString().includes(q)) ||
+                    (t.userName && t.userName.toLowerCase().includes(q)) ||
+                    (t.userEmail && t.userEmail.toLowerCase().includes(q)) ||
+                    (t.contentTitle && t.contentTitle.toLowerCase().includes(q)) ||
+                    (t.contentType && t.contentType.toLowerCase().includes(q)) ||
+                    (t.paymentMethod && t.paymentMethod.toLowerCase().includes(q)) ||
+                    (t.phone && t.phone.includes(q));
+
+                  return matchesStatus && matchesSearch;
+                });
+
+                return (
+                  <div className="overflow-x-auto rounded-xl border border-[#30363d] bg-[#0d1117]/30">
+                    <table className="w-full text-left border-collapse text-xs">
+                      <thead>
+                        <tr className="border-b border-[#30363d] bg-[#0d1117] text-[#8b949e] font-mono text-[10px] uppercase">
+                          <th className="p-3.5">Transaction ID</th>
+                          <th className="p-3.5">Student / User</th>
+                          <th className="p-3.5">Purchased Content (Metadata)</th>
+                          <th className="p-3.5 text-right font-mono">Amount Paid</th>
+                          <th className="p-3.5 text-center">Receipt channel</th>
+                          <th className="p-3.5 text-center">Status</th>
+                          <th className="p-3.5 text-right">Timestamp</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#21262d]">
+                        {filtered.length > 0 ? (
+                          filtered.map((item) => (
+                            <tr key={item.id} className="hover:bg-[#161b22]/50 transition-colors">
+                              <td className="p-3.5 font-mono text-[#ff7b00] font-bold text-[11px]">
+                                #TX-{item.id ? item.id.toString().padStart(6, '0') : "000000"}
+                              </td>
+                              <td className="p-3.5">
+                                <div className="font-bold text-slate-100 flex items-center gap-1.5">
+                                  <span>{item.userName}</span>
+                                </div>
+                                <div className="text-[10px] text-gray-500 font-normal mt-0.5">
+                                  {item.userEmail || "No email address info"}
+                                </div>
+                              </td>
+                              <td className="p-3.5">
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase font-mono bg-[#21262d] text-[#ff7b00] inline-block mb-1">
+                                  {item.contentType || "PREMIUM"}
+                                </span>
+                                <div className="font-bold text-slate-300 text-[11px] limit-line-1">
+                                  {item.contentTitle || "Custom Premium Content"}
+                                </div>
+                              </td>
+                              <td className="p-3.5 text-right font-mono font-bold text-white text-[11px]">
+                                {item.amount ? Number(item.amount).toLocaleString() : "0"} UGX
+                              </td>
+                              <td className="p-3.5 text-center">
+                                <div className="font-mono text-[10.5px] uppercase font-bold text-slate-400">
+                                  {item.paymentMethod || "MOMO"}
+                                </div>
+                                {item.phone && (
+                                  <div className="text-[9px] text-gray-600 font-mono mt-0.5">
+                                    Ref: {item.phone}
+                                  </div>
+                                )}
+                              </td>
+                              <td className="p-3.5 text-center">
+                                <span className={`inline-block text-[9px] font-bold font-mono px-2 py-0.5 rounded-full ${
+                                  item.status === "SUCCESS" || item.status === "APPROVED"
+                                    ? "bg-green-500/10 text-green-400 border border-green-500/20"
+                                    : item.status === "FAILED" || item.status === "REJECTED"
+                                    ? "bg-red-500/10 text-red-400 border border-red-500/30"
+                                    : "bg-amber-500/10 text-amber-500 border border-amber-500/20 animate-pulse"
+                                }`}>
+                                  {item.status || "PENDING"}
+                                </span>
+                              </td>
+                              <td className="p-3.5 text-right text-gray-500 font-mono text-[10.5px]">
+                                {item.timestamp ? new Date(item.timestamp).toLocaleString(undefined, {
+                                  year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                                }) : "Pending queue"}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={7} className="p-8 text-center text-gray-500 text-[11px] italic">
+                              No transactions match the specified filters. Try checking other status options or clear your search input!
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
             </div>
           )}
 
@@ -2540,8 +3736,57 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
             </div>
           )}
 
-          {/* GRID: Student Enrolled Modules & Certified Accomplishments */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Recharts Student Progress Cohort Chart */}
+          {coursesList.filter(c => c.isEnrolled).length > 0 && (
+            <div className="bg-[#161b22] border border-[#30363d] p-5 rounded-2xl space-y-4" id="student-progress-chart-block">
+              <div className="flex justify-between items-center pb-2 border-b border-[#21262d]">
+                <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                  <TrendingUp className="text-[#ff7b00] w-4 h-4" />
+                  <span>STUDENT ENROLLMENT MODULAR COMPLETION INDEX</span>
+                </h3>
+                <span className="text-[10px] font-mono text-gray-500 font-bold bg-[#ff7b00]/10 text-[#ff7b00] px-2.5 py-1 rounded">Live Index Metrics</span>
+              </div>
+              
+              <div className="h-60 w-full" id="recharts-nested-container">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={coursesList.filter(c => c.isEnrolled).map(c => ({
+                      name: c.title.substring(0, 25) + (c.title.length > 25 ? "..." : ""),
+                      "Completion %": c.progressPercent,
+                    }))}
+                    margin={{ top: 15, right: 20, left: -25, bottom: 5 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="#21262d" vertical={false} />
+                    <XAxis 
+                      dataKey="name" 
+                      stroke="#8b949e" 
+                      fontSize={10} 
+                      tickLine={false} 
+                      axisLine={{ stroke: '#30363d' }}
+                    />
+                    <YAxis 
+                      stroke="#8b949e" 
+                      domain={[0, 100]} 
+                      fontSize={10} 
+                      tickLine={false}
+                      axisLine={{ stroke: '#30363d' }}
+                      unit="%" 
+                    />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: "#1d242c", borderColor: "#30363d", borderRadius: "8px", color: "#c9d1d9" }}
+                      labelStyle={{ color: "#ffffff", fontWeight: "bold", fontSize: "11px" }}
+                      itemStyle={{ color: "#ff7b00", fontSize: "11px" }}
+                      cursor={{ fill: 'rgba(255, 123, 0, 0.05)' }}
+                    />
+                    <Bar dataKey="Completion %" fill="#ff7b00" radius={[4, 4, 0, 0]} barSize={36} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+
+          {/* GRID: Student Enrolled Modules, Certified Accomplishments, & Profile Settings */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             
             {/* Active Enrolled Courses list */}
             <div className="bg-[#161b22] border border-[#30363d] p-5 rounded-2xl flex flex-col justify-between" id="student-enrolled-courses">
@@ -2574,7 +3819,7 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
             </div>
 
             {/* My Certified PDF board badges */}
-            <div className="bg-[#161b22] border border-[#30363d] p-5 rounded-2xl" id="student-certificates-catalog">
+            <div className="bg-[#161b22] border border-[#30363d] p-5 rounded-2xl shadow-inner" id="student-certificates-catalog">
               <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-4">
                 <Award className="w-4 h-4 text-[#ff7b00]" />
                 <span>My Official Certificates</span>
@@ -2606,6 +3851,314 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
               </div>
             </div>
 
+            {/* My Profile Digital Identity Settings Card */}
+            <div className="bg-[#161b22] border border-[#30363d] p-5 rounded-2xl flex flex-col justify-between" id="student-profile-settings">
+              <div>
+                <h3 className="text-sm font-bold text-white flex items-center gap-2 mb-2">
+                  <Settings className="w-4 h-4 text-[#ff7b00]" />
+                  <span>My Profile Settings</span>
+                </h3>
+                <p className="text-[10px] text-[#8b949e] mb-4">
+                  Manage your visual digital identity, uploaded credentials, and student avatar configuration.
+                </p>
+
+                <div className="space-y-4">
+                  
+                  {/* Avatar Previews and Drag & Drop or Custom upload */}
+                  <div className="flex flex-col items-center justify-center p-3.5 bg-[#0d1117] border border-[#21262d] rounded-xl text-center space-y-3">
+                    <div className="relative group">
+                      <img
+                        src={user.profile_picture_url || user.avatarUrl || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100"}
+                        alt={user.name}
+                        className="w-16 h-16 rounded-full border-2 border-[#ff7b00] object-cover bg-neutral-900 shadow-md transition-all group-hover:scale-105"
+                        referrerPolicy="no-referrer"
+                      />
+                      <span className="absolute bottom-0 right-0 w-4 h-4 bg-green-500 border-2 border-[#0d1117] rounded-full" />
+                    </div>
+                    <div>
+                      <span className="text-[10px] font-bold text-white font-mono block uppercase">
+                        {user.name}
+                      </span>
+                      <span className="text-[9px] text-[#8b949e]">
+                        {user.email}
+                      </span>
+                    </div>
+
+                    {/* Drag and Drop File input selector */}
+                    <div className="w-full">
+                      <label className="border border-dashed border-[#ff7b00]/30 hover:border-[#ff7b00]/60 bg-[#161b22]/50 hover:bg-[#161b22] py-2 px-2.5 rounded-lg flex flex-col items-center justify-center cursor-pointer transition-all">
+                        <Upload className="w-4 h-4 text-[#ff7b00] mb-1 shrink-0" />
+                        <span className="text-[9.5px] font-bold text-[#ff7b00] uppercase tracking-wider">Upload Profile Pic</span>
+                        <span className="text-[8px] text-gray-500 font-mono mt-0.5">JPEG / PNG / Base64</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={async (e) => {
+                            if (e.target.files && e.target.files[0]) {
+                              const file = e.target.files[0];
+                              const reader = new FileReader();
+                              reader.onload = async (event) => {
+                                const fileUrl = event.target?.result as string;
+                                if (fileUrl) {
+                                  try {
+                                    setFeedback("Downscaling image footprint...");
+                                    const img = new Image();
+                                    img.onload = async () => {
+                                      const canvas = document.createElement("canvas");
+                                      const maxDim = 150;
+                                      let width = img.width;
+                                      let height = img.height;
+                                      if (width > height) {
+                                        if (width > maxDim) {
+                                          height = Math.round((height * maxDim) / width);
+                                          width = maxDim;
+                                        }
+                                      } else {
+                                        if (height > maxDim) {
+                                          width = Math.round((width * maxDim) / height);
+                                          height = maxDim;
+                                        }
+                                      }
+                                      canvas.width = width;
+                                      canvas.height = height;
+                                      const ctx = canvas.getContext("2d");
+                                      if (ctx) {
+                                        ctx.drawImage(img, 0, 0, width, height);
+                                        const optimizedBase64 = canvas.toDataURL("image/jpeg", 0.85);
+                                        
+                                        setFeedback("Saving optimized avatar to database...");
+                                        const res = await fetch("/api/users/profile", {
+                                          method: "POST",
+                                          headers: {
+                                            "Content-Type": "application/json",
+                                            "Authorization": `Bearer ${user.email}`
+                                          },
+                                          body: JSON.stringify({ profile_picture_url: optimizedBase64 })
+                                        });
+                                        const data = await res.json();
+                                        if (data.success && data.user) {
+                                          setFeedback("✨ Profile picture updated successfully!");
+                                          if (onUpdateUser) {
+                                            onUpdateUser(data.user);
+                                          } else {
+                                            window.location.reload();
+                                          }
+                                        } else {
+                                          setFeedback(`❌ Error: ${data.error || "Update failed"}`);
+                                        }
+                                      } else {
+                                        setFeedback("❌ Failed to initialize graphic context.");
+                                      }
+                                    };
+                                    img.onerror = () => {
+                                      setFeedback("❌ Failed to load source file format.");
+                                    };
+                                    img.src = fileUrl;
+                                  } catch (err: any) {
+                                    setFeedback(`❌ Optimization exception: ${err.message || err}`);
+                                  }
+                                }
+                              };
+                              reader.readAsDataURL(file);
+                            }
+                          }}
+                        />
+                      </label>
+                    </div>
+
+                  </div>
+
+                  {/* Direct Input text Url input */}
+                  <div className="space-y-1.5 bg-[#0d1117] p-3 rounded-lg border border-[#21262d]">
+                    <label className="text-[9px] text-[#8b949e] uppercase font-bold block">Or Paste Direct Image Link:</label>
+                    <div className="flex gap-1.5 justify-start items-center">
+                      <input
+                        type="text"
+                        defaultValue={user.profile_picture_url || ""}
+                        placeholder="e.g. https://domain.com/my-pic.jpg"
+                        className="flex-1 min-w-0 bg-[#161b22] border border-[#30363d] focus:border-[#ff7b00] text-[10px] rounded p-1.5 text-white outline-none font-mono"
+                        id="paste-profile-url-field"
+                      />
+                      <button
+                        onClick={async () => {
+                          const field = document.getElementById("paste-profile-url-field") as HTMLInputElement;
+                          if (field) {
+                            try {
+                              setFeedback("Setting profile picture link...");
+                              const res = await fetch("/api/users/profile", {
+                                method: "POST",
+                                headers: {
+                                  "Content-Type": "application/json",
+                                  "Authorization": `Bearer ${user.email}`
+                                },
+                                body: JSON.stringify({ profile_picture_url: field.value })
+                              });
+                              const data = await res.json();
+                              if (data.success && data.user) {
+                                setFeedback("✨ Profile picture URL updated successfully!");
+                                if (onUpdateUser) {
+                                  onUpdateUser(data.user);
+                                } else {
+                                  window.location.reload();
+                                }
+                              } else {
+                                setFeedback(`❌ Error: ${data.error || "Update failed"}`);
+                              }
+                            } catch (err: any) {
+                              setFeedback(`❌ Network issue: ${err.message || err}`);
+                            }
+                          }
+                        }}
+                        className="bg-[#ff7b00] hover:bg-orange-600 text-white font-extrabold text-[10px] px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer shrink-0"
+                      >
+                        SET URL
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Notification Settings Toggle Channels Panel */}
+                  <div className="bg-[#0d1117] border border-[#21262d] rounded-xl p-4 space-y-3.5 mt-4" id="user-profile-notifications-panel">
+                    <h4 className="text-xs font-bold text-white flex items-center gap-1.5 uppercase font-mono tracking-wide">
+                      <Settings className="w-3.5 h-3.5 text-orange-400" />
+                      Notification Channels Settings
+                    </h4>
+                    <p className="text-[9.5px] text-gray-500">
+                      Select how you want to receive course updates, grades, and premium manual alerts.
+                    </p>
+
+                    <div className="space-y-3 pt-1">
+                      {/* Email Channel Switch */}
+                      <div className="flex justify-between items-center text-xs">
+                        <div>
+                          <span className="font-bold text-slate-200 block">Email Alerts</span>
+                          <span className="text-[9.5px] text-gray-500">Receive inbox briefings on completed credentials.</span>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            const updated = {
+                              ...userNotificationSettings,
+                              emailNotifications: !userNotificationSettings.emailNotifications,
+                              email_notifications: !userNotificationSettings.emailNotifications
+                            };
+                            setUserNotificationSettings(updated);
+                            try {
+                              const res = await fetch("/api/notifications/settings", {
+                                method: "POST",
+                                headers: {
+                                  "Content-Type": "application/json",
+                                  "Authorization": `Bearer ${user.email}`
+                                },
+                                body: JSON.stringify(updated)
+                              });
+                              const data = await res.json();
+                              if (data.success) {
+                                setFeedback("✨ Email notifications preference updated!");
+                              }
+                            } catch (_) {}
+                          }}
+                          className={`w-10 h-5.5 rounded-full p-0.5 transition-colors relative cursor-pointer ${
+                            userNotificationSettings.emailNotifications ? "bg-orange-500" : "bg-[#21262d] border border-[#30363d]"
+                          }`}
+                        >
+                          <div
+                            className={`w-3.5 h-3.5 bg-white rounded-full transition-all ${
+                              userNotificationSettings.emailNotifications ? "translate-x-4" : "translate-x-0"
+                            }`}
+                          />
+                        </button>
+                      </div>
+
+                      {/* Push Channel Switch */}
+                      <div className="flex justify-between items-center text-xs">
+                        <div>
+                          <span className="font-bold text-slate-200 block">Push Notifications</span>
+                          <span className="text-[9.5px] text-gray-500">Instant notification badges on mobile sync.</span>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            const updated = {
+                              ...userNotificationSettings,
+                              pushNotifications: !userNotificationSettings.pushNotifications,
+                              push_notifications: !userNotificationSettings.pushNotifications
+                            };
+                            setUserNotificationSettings(updated);
+                            try {
+                              const res = await fetch("/api/notifications/settings", {
+                                method: "POST",
+                                headers: {
+                                  "Content-Type": "application/json",
+                                  "Authorization": `Bearer ${user.email}`
+                                },
+                                body: JSON.stringify(updated)
+                              });
+                              const data = await res.json();
+                              if (data.success) {
+                                setFeedback("✨ Push notifications preference updated!");
+                              }
+                            } catch (_) {}
+                          }}
+                          className={`w-10 h-5.5 rounded-full p-0.5 transition-colors relative cursor-pointer ${
+                            userNotificationSettings.pushNotifications ? "bg-orange-500" : "bg-[#21262d] border border-[#30363d]"
+                          }`}
+                        >
+                          <div
+                            className={`w-3.5 h-3.5 bg-white rounded-full transition-all ${
+                              userNotificationSettings.pushNotifications ? "translate-x-4" : "translate-x-0"
+                            }`}
+                          />
+                        </button>
+                      </div>
+
+                      {/* In-App Channel Switch */}
+                      <div className="flex justify-between items-center text-xs">
+                        <div>
+                          <span className="font-bold text-slate-200 block">In-App Alerts & Tones</span>
+                          <span className="text-[9.5px] text-gray-500">Control browser live sound system chimes.</span>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            const updated = {
+                              ...userNotificationSettings,
+                              soundNotifications: !userNotificationSettings.soundNotifications,
+                              sound_notifications: !userNotificationSettings.soundNotifications,
+                              inAppNotifications: !userNotificationSettings.soundNotifications
+                            };
+                            setUserNotificationSettings(updated);
+                            try {
+                              const res = await fetch("/api/notifications/settings", {
+                                method: "POST",
+                                headers: {
+                                  "Content-Type": "application/json",
+                                  "Authorization": `Bearer ${user.email}`
+                                },
+                                body: JSON.stringify(updated)
+                              });
+                              const data = await res.json();
+                              if (data.success) {
+                                setFeedback("✨ In-App alerts preference updated!");
+                              }
+                            } catch (_) {}
+                          }}
+                          className={`w-10 h-5.5 rounded-full p-0.5 transition-colors relative cursor-pointer ${
+                            userNotificationSettings.soundNotifications ? "bg-orange-500" : "bg-[#21262d] border border-[#30363d]"
+                          }`}
+                        >
+                          <div
+                            className={`w-3.5 h-3.5 bg-white rounded-full transition-all ${
+                              userNotificationSettings.soundNotifications ? "translate-x-4" : "translate-x-0"
+                            }`}
+                          />
+                        </button>
+                      </div>
+
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+
           </div>
 
           {/* Student learning streak stats */}
@@ -2628,6 +4181,90 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
               {adminAnnouncements.length === 0 && (
                 <p className="text-[10px] text-gray-500 text-center py-3">No announcements on board.</p>
               )}
+            </div>
+          </div>
+
+          {/* Student Transaction History View */}
+          <div className="bg-[#161b22] border border-[#30363d] p-5 rounded-2xl shadow-xl flex flex-col space-y-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 pb-3 border-b border-[#21262d]">
+              <div>
+                <h4 className="text-xs font-mono font-bold text-gray-400 tracking-wider uppercase">VERIFIED LEDGER</h4>
+                <h3 className="text-sm font-extrabold text-white flex items-center gap-1.5 mt-0.5">
+                  <FileText className="text-[#ff7b00] w-4 h-4" />
+                  <span>Your Transaction & Premium Access History</span>
+                </h3>
+              </div>
+              <span className="text-[10px] font-mono font-bold text-[#2ea44f] bg-[#2ea44f]/10 border border-[#2ea44f]/25 px-2.5 py-1 rounded inline-flex items-center gap-1">
+                💸 Real-time Ledger
+              </span>
+            </div>
+
+            <div className="overflow-x-auto rounded-xl border border-[#21262d] bg-[#0d1117]/40">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-[#21262d] bg-[#0d1117] text-[#8b949e] font-mono text-[10px] uppercase">
+                    <th className="p-3">Reference / ID</th>
+                    <th className="p-3">Purchased Content & Metadata</th>
+                    <th className="p-3">Channel</th>
+                    <th className="p-3 text-right font-mono">Price</th>
+                    <th className="p-3 text-center">Status</th>
+                    <th className="p-3 text-right">Settled On</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[#21262d] font-sans">
+                  {studentPaymentRequestsList.length > 0 ? (
+                    studentPaymentRequestsList.map((tx) => (
+                      <tr key={tx.id} className="hover:bg-[#161b22]/50 transition-colors">
+                        <td className="p-3 font-mono text-gray-400 font-bold text-[10.5px]">
+                          {tx.id ? `#TX-${tx.id.toString().substring(0, 8)}` : "DEFAULT-STUB"}
+                        </td>
+                        <td className="p-3">
+                          <div className="font-bold text-slate-100">{tx.contentTitle || tx.contentType || "Premium Item"}</div>
+                          <div className="text-[10px] text-gray-500 font-normal flex items-center gap-1.5 mt-0.5">
+                            <span>Phone: {tx.phone || "N/A"}</span>
+                            <span>•</span>
+                            <span>Proof: {tx.cloudinaryProofUrl ? (
+                              <a href={tx.cloudinaryProofUrl} target="_blank" rel="noreferrer" className="text-orange-400 hover:underline inline-flex items-center gap-0.5 font-bold">
+                                View Proof ↗
+                              </a>
+                            ) : "None"}</span>
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <span className="font-mono text-[10.5px] uppercase font-bold text-slate-300">
+                            {tx.paymentMethod || "MOMO"}
+                          </span>
+                        </td>
+                        <td className="p-3 text-right text-white font-mono font-bold">
+                          {tx.amount ? Number(tx.amount).toLocaleString() : "0"} UGX
+                        </td>
+                        <td className="p-3 text-center">
+                          <span className={`inline-block text-[10px] font-bold font-mono px-2 py-0.5 rounded-full ${
+                            tx.status === "APPROVED" || tx.status === "SUCCESS"
+                              ? "bg-green-500/10 text-green-400 border border-green-500/20"
+                              : tx.status === "REJECTED" || tx.status === "FAILED"
+                              ? "bg-red-500/10 text-red-400 border border-red-500/20"
+                              : "bg-amber-500/10 text-amber-400 border border-amber-500/20 animate-pulse"
+                          }`}>
+                            {tx.status || "PENDING"}
+                          </span>
+                        </td>
+                        <td className="p-3 text-right text-gray-500 font-mono text-[10.5px]">
+                          {tx.createdAt || tx.timestamp ? new Date(tx.createdAt || tx.timestamp).toLocaleDateString(undefined, {
+                            year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                          }) : "Queueing"}
+                        </td>
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={6} className="p-6 text-center text-gray-500 text-[11px] italic">
+                        No transactions registered yet. Purchase custom courses, challenges, or PDF books to record ledger history here!
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
 

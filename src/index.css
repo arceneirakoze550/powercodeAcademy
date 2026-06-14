@@ -74,3 +74,99 @@
     background: #ff7b00;
   }
 }
+
+/* Accessibility High-Contrast Light Mode override rules */
+body.light-mode {
+  background-color: #ffffff !important;
+  color: #1f2328 !important;
+}
+
+body.light-mode #classroom-workspace,
+body.light-mode #view-dashboard,
+body.light-mode #view-courses,
+body.light-mode #view-tutorials,
+body.light-mode #view-pdfs,
+body.light-mode #view-quizzes,
+body.light-mode #view-challenges,
+body.light-mode #view-community,
+body.light-mode #landing-page-hero,
+body.light-mode #interactive-curriculum-pathway,
+body.light-mode .bg-\[\#0d1117\],
+body.light-mode .bg-black {
+  background-color: #fafbfc !important;
+  color: #1f2328 !important;
+}
+
+body.light-mode .bg-\[\#161b22\],
+body.light-mode .bg-\[\#21262d\],
+body.light-mode .bg-[#21262d],
+body.light-mode .bg-zinc-900,
+body.light-mode .bg-slate-900,
+body.light-mode .bg-zinc-850 {
+  background-color: #ffffff !important;
+  color: #1f2328 !important;
+}
+
+body.light-mode .border-\[\#30363d\],
+body.light-mode .border-[#30363d],
+body.light-mode .border-\[\#21262d\],
+body.light-mode .border-[#21262d],
+body.light-mode .border-zinc-800,
+body.light-mode .divide-\[\#30363d\] > * {
+  border-color: #afb8c1 !important;
+}
+
+body.light-mode .text-white,
+body.light-mode .text-slate-100,
+body.light-mode .text-slate-200,
+body.light-mode .text-zinc-100 {
+  color: #1f2328 !important;
+}
+
+body.light-mode .text-slate-300,
+body.light-mode .text-gray-300,
+body.light-mode .text-[#c9d1d9] {
+  color: #24292f !important;
+}
+
+body.light-mode .text-gray-400,
+body.light-mode .text-slate-400,
+body.light-mode .text-[#8b949e] {
+  color: #57606a !important;
+}
+
+body.light-mode .text-gray-500,
+body.light-mode .text-slate-500 {
+  color: #6e7781 !important;
+}
+
+body.light-mode .hover\:bg-\[\#21262d\]:hover,
+body.light-mode .hover\:bg-\[\#30363d\]:hover,
+body.light-mode .hover\:bg-zinc-800:hover {
+  background-color: #eaeef2 !important;
+}
+
+body.light-mode input,
+body.light-mode textarea,
+body.light-mode select {
+  background-color: #ffffff !important;
+  color: #1f2328 !important;
+  border-color: #57606a !important;
+}
+
+body.light-mode .text-orange-400,
+body.light-mode .text-[#ff7b00] {
+  color: #bf4f00 !important;
+}
+
+body.light-mode .bg-[#ff7b00],
+body.light-mode .bg-\[\#ff7b00\],
+body.light-mode .hover\:bg-\[\#e66f00\] {
+  background-color: #bf4f00 !important;
+}
+
+body.light-mode .bg-green-500\/10 {
+  background-color: #dafbe1 !important;
+  color: #1a7f37 !important;
+}
+

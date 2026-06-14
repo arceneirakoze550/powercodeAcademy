@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Play, Sparkles, Terminal, FileCode, Save, ShieldAlert, Cpu, Check, HelpCircle, Download, Plus, Folder, Trash, Eye, Settings, Code, RefreshCw } from "lucide-react";
 import Editor, { loader } from "@monaco-editor/react";
+import { ConfirmDeleteModal } from "./ConfirmDeleteModal";
 
 // Define global MonacoEnvironment before loading monaco to force using a Same-Origin dummy worker
 // This cleanly bypasses cross-origin "Failed to execute 'importScripts'" inside sandboxed iframe environments
@@ -96,6 +97,28 @@ export default function IDE({ user, geminiKeyActive, t }: IDEProps) {
   const [newFileName, setNewFileName] = useState<string>("");
   const [newFileLang, setNewFileLang] = useState<string>("javascript");
 
+  // REUSABLE CONFIRM DELETE MODAL STATE
+  const [deleteModal, setDeleteModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    description: string;
+    onConfirm: () => Promise<void> | void;
+  }>({
+    isOpen: false,
+    title: "",
+    description: "",
+    onConfirm: () => {},
+  });
+
+  const openDeleteConfirmation = (title: string, description: string, onConfirm: () => Promise<void> | void) => {
+    setDeleteModal({
+      isOpen: true,
+      title,
+      description,
+      onConfirm,
+    });
+  };
+
   // AI Assistant states
   const [aiPrompt, setAiPrompt] = useState<string>("");
   const [aiResponse, setAiResponse] = useState<string>("Welcome student! I am your companion Coding Assistant inside PowerCode Academy.\n\nUse the prompts below or ask any tailored coding questions, error-traces, or Big O complexity checks!");
@@ -143,13 +166,18 @@ export default function IDE({ user, geminiKeyActive, t }: IDEProps) {
       alert("At least one active file must remain in your compiler workspace.");
       return;
     }
-    if (confirm(`Are you sure you want to remove ${name} from your workspace?`)) {
-      const filtered = workspaceFiles.filter(f => f.id !== id);
-      setWorkspaceFiles(filtered);
-      if (activeFileId === id) {
-        setActiveFileId(filtered[0].id);
+    openDeleteConfirmation(
+      "Delete Workspace File?",
+      `Are you sure you want to remove "${name}" from your workspace?`,
+      async () => {
+        // Immediate local filter operation!
+        const filtered = workspaceFiles.filter(f => f.id !== id);
+        setWorkspaceFiles(filtered);
+        if (activeFileId === id) {
+          setActiveFileId(filtered[0].id);
+        }
       }
-    }
+    );
   };
 
   const handleDownloadFile = () => {
@@ -249,6 +277,13 @@ export default function IDE({ user, geminiKeyActive, t }: IDEProps) {
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-4 gap-4 bg-[#0d1117] p-4 rounded-2xl border border-[#30363d] shadow-2xl relative font-sans" id="powercode-compiler-IDE">
+      <ConfirmDeleteModal
+        isOpen={deleteModal.isOpen}
+        title={deleteModal.title}
+        description={deleteModal.description}
+        onClose={() => setDeleteModal(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={deleteModal.onConfirm}
+      />
       
       {/* COLUMN 1: WORKSPACE FILE EXPLORER */}
       <div className="xl:col-span-1 bg-[#161b22] rounded-xl border border-[#30363d] p-4 flex flex-col justify-between h-[640px]">
@@ -452,8 +487,20 @@ export default function IDE({ user, geminiKeyActive, t }: IDEProps) {
 
           {/* AI Response Output Console Area */}
           <div className="flex-1 overflow-y-auto text-xs space-y-3 mb-4 pr-1 text-[#c9d1d9] scrollbar-thin">
-            <div className="bg-[#0d1117] border border-[#30363d] rounded-xl p-3 space-y-2 select-text leading-relaxed font-mono text-[11px]">
-              {aiResponse}
+            <div className="flex gap-2 items-start bg-[#0d1117] border border-[#30363d] rounded-xl p-3">
+              <img 
+                src="/powercodeacademy.png" 
+                alt="PowerCode AI" 
+                className="w-7 h-7 object-contain bg-[#161b22] border border-[#21262d] rounded-lg p-0.5 shrink-0"
+                referrerPolicy="no-referrer"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1620712943543-bcc4688e7485?w=100";
+                }}
+              />
+              <div className="space-y-1 select-text leading-relaxed font-mono text-[11px] flex-1">
+                <span className="text-[9px] text-[#ff7b00] font-sans font-bold uppercase block">PowerCode AI Coach</span>
+                <p className="whitespace-pre-wrap">{aiResponse}</p>
+              </div>
             </div>
 
             {/* Quick Helper presets */}

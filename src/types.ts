@@ -11,6 +11,7 @@ export interface User {
   createdAt: string;
   isVerified: boolean;
   score: number;
+  profile_picture_url?: string;
 }
 
 export interface Lesson {
@@ -20,6 +21,13 @@ export interface Lesson {
   videoUrl: string;
   durationMinutes: number;
   isPreviewAllowed: boolean;
+  quizId?: number;
+  isPublished?: boolean;
+  isArchived?: boolean;
+  isDeleted?: boolean;
+  status?: string;
+  deleted_at?: string;
+  deleted_by?: string;
 }
 
 export interface Module {
@@ -52,6 +60,7 @@ export interface Tutorial {
   languageSlug: string;
   coverImageUrl?: string;
   videoUrl?: string;
+  embedded_video_url?: string;
   isPublished?: boolean;
   isArchived?: boolean;
   isDeleted?: boolean;
@@ -85,6 +94,12 @@ export interface Quiz {
   durationMinutes: number;
   passingScore: number;
   questions: QuizQuestion[];
+  isPublished?: boolean;
+  isArchived?: boolean;
+  isDeleted?: boolean;
+  status?: string;
+  deleted_at?: string;
+  deleted_by?: string;
 }
 
 export interface CodingChallenge {
@@ -158,6 +173,7 @@ export interface Certificate {
   type?: string; 
   description?: string;
   qrCode?: string;
+  digitalSignature?: string;
 }
 
 export interface CertificateTemplate {
@@ -231,6 +247,34 @@ export interface AdminActivityLog {
   contentTitle: string;
   timestamp: string;
   ipAddress: string;
+}
+
+export interface PdfPurchase {
+  id: number;
+  userId: number;
+  userName: string;
+  pdfId: number;
+  pdfTitle: string;
+  amountPaid: number;
+  paymentMethod: "MTN" | "Airtel";
+  phone: string;
+  status: "PENDING_APPROVAL" | "APPROVED" | "REJECTED";
+  proofUrl: string;
+  createdAt: string;
+  approvedAt?: string;
+}
+
+export interface ProgrammingExample {
+  id: number;
+  title: string;
+  language: string;
+  code: string;
+  description: string;
+}
+
+export interface Category {
+  id: number;
+  name: string;
 }
 
 
