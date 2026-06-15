@@ -345,8 +345,48 @@ async function persistStateToPostgres(state: DbState) {
       `, [lp.userId, lp.lessonId, lp.completedAt]).catch(() => {});
     }
 
+    // PDF Purchases Sync
+    for (const p of (state.pdfPurchases || [])) {
+      await pgPool.query(`
+        INSERT INTO pdf_purchases (id, user_id, user_name, pdf_id, pdf_title, amount_paid, payment_method, phone, status, proof_url, created_at, approved_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        ON CONFLICT (id) DO UPDATE SET
+          user_id = EXCLUDED.user_id,
+          user_name = EXCLUDED.user_name,
+          pdf_id = EXCLUDED.pdf_id,
+          pdf_title = EXCLUDED.pdf_title,
+          amount_paid = EXCLUDED.amount_paid,
+          payment_method = EXCLUDED.payment_method,
+          phone = EXCLUDED.phone,
+          status = EXCLUDED.status,
+          proof_url = EXCLUDED.proof_url,
+          created_at = EXCLUDED.created_at,
+          approved_at = EXCLUDED.approved_at
+      `, [
+        p.id, p.userId, p.userName || "", p.pdfId, p.pdfTitle || "", p.amountPaid || 0,
+        p.paymentMethod || "", p.phone || "", p.status || "PENDING_APPROVAL", p.proofUrl || "",
+        p.createdAt || "", p.approvedAt || ""
+      ]);
+    }
+
+    // Premium Access Sync
+    for (const pa of (state.premiumAccess || [])) {
+      await pgPool.query(`
+        INSERT INTO premium_access (id, user_id, content_type, content_id, granted_at, status)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        ON CONFLICT (id) DO UPDATE SET
+          user_id = EXCLUDED.user_id,
+          content_type = EXCLUDED.content_type,
+          content_id = EXCLUDED.content_id,
+          granted_at = EXCLUDED.granted_at,
+          status = EXCLUDED.status
+      `, [
+        pa.id, pa.userId, pa.contentType || "", pa.contentId, pa.grantedAt || "", pa.status || "ACTIVE"
+      ]);
+    }
+
     // Enforce sequence reset to the highest ID for all tables
-    const seqs = ['courses', 'modules', 'lessons', 'tutorials', 'pdf_books', 'quizzes', 'questions', 'challenges', 'payment_requests', 'transactions', 'notifications', 'course_reviews', 'users'];
+    const seqs = ['courses', 'modules', 'lessons', 'tutorials', 'pdf_books', 'quizzes', 'questions', 'challenges', 'payment_requests', 'transactions', 'notifications', 'course_reviews', 'users', 'pdf_purchases', 'premium_access'];
     for (const tbl of seqs) {
       await pgPool.query(`
         SELECT setval(pg_get_serial_sequence('${tbl}', 'id'), COALESCE((SELECT MAX(id) FROM ${tbl}), 1), true)
@@ -623,6 +663,42 @@ async function loadDBFromPostgres(): Promise<DbState> {
       timestamp: row.timestamp || ""
     }));
 
+    // PDF Purchases
+    try {
+      const pdfPurchasesRes = await pgPool.query("SELECT * FROM pdf_purchases ORDER BY id ASC");
+      db.pdfPurchases = pdfPurchasesRes.rows.map(row => ({
+        id: row.id,
+        userId: row.user_id,
+        userName: row.user_name || "",
+        pdfId: row.pdf_id,
+        pdfTitle: row.pdf_title || "",
+        amountPaid: Number(row.amount_paid) || 0,
+        paymentMethod: row.payment_method || "",
+        phone: row.phone || "",
+        status: row.status || "PENDING_APPROVAL",
+        proofUrl: row.proof_url || "",
+        createdAt: row.created_at || "",
+        approvedAt: row.approved_at || ""
+      }));
+    } catch (e) {
+      db.pdfPurchases = [];
+    }
+
+    // Premium Access
+    try {
+      const premiumAccessRes = await pgPool.query("SELECT * FROM premium_access ORDER BY id ASC");
+      db.premiumAccess = premiumAccessRes.rows.map(row => ({
+        id: row.id,
+        userId: row.user_id,
+        contentType: row.content_type || "",
+        contentId: row.content_id,
+        grantedAt: row.granted_at || "",
+        status: row.status || "ACTIVE"
+      }));
+    } catch (e) {
+      db.premiumAccess = [];
+    }
+
     // 10. Notifications
     const noteRes = await pgPool.query("SELECT * FROM notifications ORDER BY id ASC");
     db.notifications = noteRes.rows.map(row => ({
@@ -688,6 +764,7 @@ async function initPgDatabase() {
     await pgPool.query(`CREATE TABLE IF NOT EXISTS payment_requests (id SERIAL PRIMARY KEY);`);
     await pgPool.query(`CREATE TABLE IF NOT EXISTS payment_proofs (id SERIAL PRIMARY KEY);`);
     await pgPool.query(`CREATE TABLE IF NOT EXISTS premium_access (id SERIAL PRIMARY KEY);`);
+    await pgPool.query(`CREATE TABLE IF NOT EXISTS pdf_purchases (id SERIAL PRIMARY KEY);`);
     await pgPool.query(`CREATE TABLE IF NOT EXISTS transactions (id SERIAL PRIMARY KEY);`);
     await pgPool.query(`CREATE TABLE IF NOT EXISTS notifications (id SERIAL PRIMARY KEY);`);
     await pgPool.query(`CREATE TABLE IF NOT EXISTS notification_settings (id SERIAL PRIMARY KEY);`);
@@ -815,6 +892,24 @@ async function initPgDatabase() {
       "ALTER TABLE payment_requests ADD COLUMN IF NOT EXISTS rejection_reason TEXT;",
       "ALTER TABLE payment_requests ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE;",
       "ALTER TABLE payment_requests ADD COLUMN IF NOT EXISTS created_at TEXT;",
+
+      "ALTER TABLE premium_access ADD COLUMN IF NOT EXISTS user_id INTEGER;",
+      "ALTER TABLE premium_access ADD COLUMN IF NOT EXISTS content_type TEXT;",
+      "ALTER TABLE premium_access ADD COLUMN IF NOT EXISTS content_id INTEGER;",
+      "ALTER TABLE premium_access ADD COLUMN IF NOT EXISTS granted_at TEXT;",
+      "ALTER TABLE premium_access ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'ACTIVE';",
+
+      "ALTER TABLE pdf_purchases ADD COLUMN IF NOT EXISTS user_id INTEGER;",
+      "ALTER TABLE pdf_purchases ADD COLUMN IF NOT EXISTS user_name TEXT;",
+      "ALTER TABLE pdf_purchases ADD COLUMN IF NOT EXISTS pdf_id INTEGER;",
+      "ALTER TABLE pdf_purchases ADD COLUMN IF NOT EXISTS pdf_title TEXT;",
+      "ALTER TABLE pdf_purchases ADD COLUMN IF NOT EXISTS amount_paid INTEGER;",
+      "ALTER TABLE pdf_purchases ADD COLUMN IF NOT EXISTS payment_method TEXT;",
+      "ALTER TABLE pdf_purchases ADD COLUMN IF NOT EXISTS phone TEXT;",
+      "ALTER TABLE pdf_purchases ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'PENDING_APPROVAL';",
+      "ALTER TABLE pdf_purchases ADD COLUMN IF NOT EXISTS proof_url TEXT;",
+      "ALTER TABLE pdf_purchases ADD COLUMN IF NOT EXISTS created_at TEXT;",
+      "ALTER TABLE pdf_purchases ADD COLUMN IF NOT EXISTS approved_at TEXT;",
 
       "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS user_id INTEGER;",
       "ALTER TABLE transactions ADD COLUMN IF NOT EXISTS request_id INTEGER;",
@@ -1061,6 +1156,7 @@ interface Course {
   thumbnailUrl: string;
   price: number;
   isPremium: boolean;
+  category?: string;
   isPublished?: boolean;
   isArchived?: boolean;
   isDeleted?: boolean;
@@ -1077,6 +1173,7 @@ interface Course {
       videoUrl: string;
       durationMinutes: number;
       isPreviewAllowed: boolean;
+      quizId?: number | null;
       isPublished?: boolean;
       isArchived?: boolean;
       isDeleted?: boolean;
@@ -1092,8 +1189,8 @@ interface Tutorial {
   title: string;
   category: string;
   content: string;
-  codeSnippet: string;
-  languageSlug: string;
+  codeSnippet?: string;
+  languageSlug?: string;
   coverImageUrl?: string;
   videoUrl?: string;
   embedded_video_url?: string;
@@ -1109,10 +1206,14 @@ interface Pdf {
   id: number;
   title: string;
   author: string;
-  category: string;
+  category?: string;
   fileUrl: string;
-  previewUrl: string;
+  previewUrl?: string;
   isPremium: boolean;
+  price?: number;
+  thumbnailUrl?: string;
+  description?: string;
+  createdAt?: string;
   isPublished?: boolean;
   isArchived?: boolean;
   isDeleted?: boolean;
@@ -1821,27 +1922,51 @@ app.post("/api/users/profile", async (req, res) => {
     return res.status(401).json({ error: "Not authorized to update profile assets." });
   }
 
-  const { profile_picture_url } = req.body;
+  const { name, email, password, profile_picture_url } = req.body;
   const db = getDB();
   const dbUser = db.users.find(u => u.id === user.id);
   if (!dbUser) {
     return res.status(404).json({ error: "User profile record not found." });
   }
 
-  dbUser.profile_picture_url = profile_picture_url || "";
-  // Keep regular avatarUrl synchronized too if desired, but user has separate profile_picture_url
+  // Update properties if provided in request body
+  if (name !== undefined) {
+    dbUser.name = String(name).trim();
+  }
+  if (email !== undefined) {
+    const cleanEmail = String(email).trim().toLowerCase();
+    if (cleanEmail && cleanEmail !== dbUser.email) {
+      // Ensure email uniqueness
+      const exists = db.users.some(u => u.email === cleanEmail && u.id !== user.id);
+      if (exists) {
+        return res.status(400).json({ error: "Email is already in use by another user profile." });
+      }
+      dbUser.email = cleanEmail;
+    }
+  }
+  if (password !== undefined) {
+    const cleanPass = String(password).trim();
+    if (cleanPass) {
+      dbUser.passwordHash = cleanPass;
+    }
+  }
+  if (profile_picture_url !== undefined) {
+    dbUser.profile_picture_url = profile_picture_url || "";
+    dbUser.avatarUrl = profile_picture_url || "";
+  }
+
   saveDB(db);
 
   if (pgPool && pgConnectedStatus) {
     try {
       await pgPool.query(`
         UPDATE users 
-        SET profile_picture_url = $1
-        WHERE id = $2
-      `, [profile_picture_url || "", user.id]);
-      console.log(`[Database] Synchronously updated Neon PG profile picture size: ${profile_picture_url ? profile_picture_url.length : 0} chars for user ${user.email}`);
+        SET name = $1, email = $2, password_hash = $3, profile_picture_url = $4, avatar_url = $5
+        WHERE id = $6
+      `, [dbUser.name, dbUser.email, dbUser.passwordHash, dbUser.profile_picture_url, dbUser.avatarUrl, user.id]);
+      console.log(`[Database] Robustly updated PG credentials profile for student email ${user.email}`);
     } catch (err) {
-      console.error("[Database] Failed to synchronously update user profile in Postgres:", err);
+      console.error("[Database] Failed to save pg users profile modifications:", err);
     }
   }
 
@@ -1856,6 +1981,50 @@ app.get("/api/users", (req, res) => {
   }
   const db = getDB();
   res.json({ users: db.users });
+});
+
+// DELETE USER (Admin Only)
+app.delete("/api/users/:id", (req, res) => {
+  const adminUser = parseUserFromAuth(req);
+  if (!adminUser || adminUser.role !== "ADMIN") {
+    return res.status(403).json({ error: "Unauthorized access. Admins only." });
+  }
+
+  const targetId = Number(req.params.id);
+  if (targetId === adminUser.id) {
+    return res.status(400).json({ error: "You cannot delete your own admin account while active." });
+  }
+
+  const db = getDB();
+  db.users = db.users || [];
+
+  const idx = db.users.findIndex(u => u.id === targetId);
+  if (idx === -1) {
+    return res.status(404).json({ error: "User not found" });
+  }
+
+  const deletedUser = db.users[idx];
+  db.users.splice(idx, 1);
+
+  // Clean secondary items referencing this user
+  db.enrollments = (db.enrollments || []).filter(e => e.userId !== targetId);
+  db.lessonProgress = (db.lessonProgress || []).filter(p => p.userId !== targetId);
+  db.bookmarks = (db.bookmarks || []).filter(b => b.userId !== targetId);
+  db.notifications = (db.notifications || []).filter(n => n.userId !== targetId);
+
+  saveDB(db);
+
+  if (pgPool && pgConnectedStatus) {
+    pgPool.query("DELETE FROM users WHERE id = $1", [targetId]).catch((err) => {
+      console.error("[Database Sync] Error deleting user from Postgres:", err);
+    });
+    pgPool.query("DELETE FROM enrollments WHERE user_id = $1", [targetId]).catch(() => {});
+    pgPool.query("DELETE FROM lesson_progress WHERE user_id = $1", [targetId]).catch(() => {});
+    pgPool.query("DELETE FROM bookmarks WHERE user_id = $1", [targetId]).catch(() => {});
+    pgPool.query("DELETE FROM notifications WHERE user_id = $1", [targetId]).catch(() => {});
+  }
+
+  res.json({ success: true, message: `User "${deletedUser.name}" successfully deleted.` });
 });
 
 function getOnlineImageForTitle(title: string): string {
@@ -4310,7 +4479,7 @@ app.get("/api/notifications/my-list", (req, res) => {
     list = list.filter((n: any) => n.userId === user.id || n.userId === 0);
   }
 
-  res.json({ notifications: list });
+  res.json({ success: true, notifications: list });
 });
 
 // Set notification reads status
@@ -4347,6 +4516,65 @@ app.post("/api/notifications/read", (req, res) => {
   }
 
   res.json({ success: true });
+});
+
+// DELETE SINGLE NOTIFICATION
+app.delete("/api/notifications/:id", (req, res) => {
+  const user = parseUserFromAuth(req);
+  if (!user) return res.status(401).json({ error: "Authentication required" });
+
+  const notifId = Number(req.params.id);
+  const db = getDB();
+  db.notifications = db.notifications || [];
+
+  const foundIndex = db.notifications.findIndex((n: any) => n.id === notifId);
+  if (foundIndex === -1) {
+    return res.status(404).json({ error: "Notification not found" });
+  }
+
+  const notif = db.notifications[foundIndex];
+  if (notif.userId !== user.id && notif.userId !== 0 && user.role !== "ADMIN") {
+    return res.status(403).json({ error: "Unauthorized operation" });
+  }
+
+  db.notifications.splice(foundIndex, 1);
+  saveDB(db);
+
+  if (pgPool && pgConnectedStatus) {
+    pgPool.query("DELETE FROM notifications WHERE id = $1", [notifId]).catch((err) => {
+      console.error("[Database Sync] Error deleting single notification from Postgres:", err);
+    });
+  }
+
+  res.json({ success: true, message: "Notification deleted successfully." });
+});
+
+// DELETE ALL NOTIFICATIONS FOR CURRENT USER
+app.delete("/api/notifications", (req, res) => {
+  const user = parseUserFromAuth(req);
+  if (!user) return res.status(401).json({ error: "Authentication required" });
+
+  const db = getDB();
+  db.notifications = db.notifications || [];
+
+  db.notifications = db.notifications.filter((n: any) => {
+    if (user.role === "ADMIN") {
+      return n.userId !== user.id && n.userId !== -1 && n.userId !== 0;
+    }
+    return n.userId !== user.id && n.userId !== 0;
+  });
+
+  saveDB(db);
+
+  if (pgPool && pgConnectedStatus) {
+    if (user.role === "ADMIN") {
+      pgPool.query("DELETE FROM notifications WHERE user_id = $1 OR user_id = -1 OR user_id = 0", [user.id]).catch(() => {});
+    } else {
+      pgPool.query("DELETE FROM notifications WHERE user_id = $1 OR user_id = 0", [user.id]).catch(() => {});
+    }
+  }
+
+  res.json({ success: true, message: "All notifications cleared successfully." });
 });
 
 // Retrieve notification settings

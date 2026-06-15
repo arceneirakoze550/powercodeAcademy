@@ -13,8 +13,8 @@ interface LoginModalProps {
 }
 
 export function LoginModal({ onClose, onSuccess, t }: LoginModalProps) {
-  const [email, setEmail] = useState<string>("student@powercode.com");
-  const [password, setPassword] = useState<string>("student123");
+  const [email, setEmail] = useState<string>("");
+  const [password, setPassword] = useState<string>("");
   const [errorFeedback, setErrorFeedback] = useState<string>("");
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
@@ -22,6 +22,7 @@ export function LoginModal({ onClose, onSuccess, t }: LoginModalProps) {
     e.preventDefault();
     setIsLoading(true);
     setErrorFeedback("");
+    window.showPowerCodeLoader?.("Loading Student Data...");
 
     try {
       const res = await fetch("/api/auth/login", {
@@ -33,12 +34,17 @@ export function LoginModal({ onClose, onSuccess, t }: LoginModalProps) {
       const data = await res.json();
       if (data.error) {
         setErrorFeedback(data.error);
+        window.hidePowerCodeLoader?.();
       } else {
         onSuccess(data.token, data.user);
         onClose();
+        setTimeout(() => {
+          window.hidePowerCodeLoader?.();
+        }, 800);
       }
     } catch (err: any) {
       setErrorFeedback(`Driver connection error: ${err.message || err}`);
+      window.hidePowerCodeLoader?.();
     } finally {
       setIsLoading(false);
     }
@@ -106,26 +112,6 @@ export function LoginModal({ onClose, onSuccess, t }: LoginModalProps) {
             {isLoading ? "Authenticating Account credentials..." : t("login")}
           </button>
         </form>
-
-        <div className="mt-5 pt-4 border-t border-[#21262d] text-center text-xs text-[#8b949e]">
-          Quick Credentials for Sandboxing:
-          <div className="flex justify-center gap-2 mt-2">
-            <button
-              type="button"
-              onClick={(e) => { e.preventDefault(); setEmail("student@powercode.com"); setPassword("student123"); }}
-              className="bg-[#21262d] text-[#c9d1d9] border border-[#30363d] rounded px-2.5 py-1 text-[10px] hover:border-[#ff7b00] cursor-pointer"
-            >
-              Student demo
-            </button>
-            <button
-              type="button"
-              onClick={(e) => { e.preventDefault(); setEmail("admin@powercode.com"); setPassword("admin123"); }}
-              className="bg-[#21262d] text-[#c9d1d9] border border-[#30363d] rounded px-2.5 py-1 text-[10px] hover:border-[#ff7b00] cursor-pointer"
-            >
-              Admin pilot
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   );
@@ -154,6 +140,7 @@ export function RegisterModal({ onClose, onSuccess, t }: RegisterModalProps) {
 
     setIsLoading(true);
     setFeedback("");
+    window.showPowerCodeLoader?.("Uploading Content...");
 
     try {
       const res = await fetch("/api/auth/register", {
@@ -165,12 +152,17 @@ export function RegisterModal({ onClose, onSuccess, t }: RegisterModalProps) {
       const data = await res.json();
       if (data.error) {
         setFeedback(data.error);
+        window.hidePowerCodeLoader?.();
       } else {
         onSuccess(data.token, data.user);
         onClose();
+        setTimeout(() => {
+          window.hidePowerCodeLoader?.();
+        }, 800);
       }
     } catch (err: any) {
       setFeedback(`Driver register failure: ${err.message || err}`);
+      window.hidePowerCodeLoader?.();
     } finally {
       setIsLoading(false);
     }

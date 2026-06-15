@@ -3,7 +3,7 @@ import {
   Sparkles, Cpu, BookOpen, FileText, Terminal, Flame, Info, Menu, X, Globe,
   ChevronDown, LogOut, Award, MessageSquare, Plus, Search, Bookmark,
   HelpCircle, Send, ThumbsUp, Check, Lock, Unlock, ExternalLink, HelpCircle as FaqIcon,
-  ChevronLeft, ChevronRight, Download, Sun, Moon, Wifi, WifiOff
+  ChevronLeft, ChevronRight, Download, Sun, Moon, Wifi, WifiOff, Trash2
 } from "lucide-react";
 
 import { useTheme } from "./utils/ThemeContext";
@@ -18,6 +18,14 @@ import { ConfirmDeleteModal } from "./components/ConfirmDeleteModal";
 import { pdfExportService } from "./utils/pdfExportService";
 import { io } from "socket.io-client";
 import { SoundManager } from "./lib/audio";
+import LoadingScreen from "./components/LoadingScreen";
+
+declare global {
+  interface Window {
+    showPowerCodeLoader?: (msg: string) => void;
+    hidePowerCodeLoader?: () => void;
+  }
+}
 
 export default function App() {
   // Confirmation Modal state
@@ -41,6 +49,25 @@ export default function App() {
       onConfirm,
     });
   };
+
+  // Global Loader state setup
+  const [globalLoader, setGlobalLoader] = useState<{ isVisible: boolean; message: string }>({
+    isVisible: true,
+    message: "Loading Student Data..."
+  });
+
+  useEffect(() => {
+    window.showPowerCodeLoader = (msg: string) => {
+      setGlobalLoader({ isVisible: true, message: msg });
+    };
+    window.hidePowerCodeLoader = () => {
+      setGlobalLoader(prev => ({ ...prev, isVisible: false }));
+    };
+    return () => {
+      delete window.showPowerCodeLoader;
+      delete window.hidePowerCodeLoader;
+    };
+  }, []);
 
   // Global Session properties
   const [user, setUser] = useState<User | null>(() => {
@@ -71,6 +98,30 @@ export default function App() {
   
   // Sidebar collapsed state
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(false);
+
+  // Console logging debugging handler for Approve button click
+  const handleApprovePaymentDebug = async (paymentId: number, email: string) => {
+    const payload = {};
+    console.log("[DEBUG] Approve Click Handler: Initiated");
+    console.log("[DEBUG] Request Payload:", JSON.stringify(payload));
+    console.log("[DEBUG] Exact Payment ID being sent to /api/payments/approve:", paymentId);
+    try {
+      const res = await fetch(`/api/payments/${paymentId}/approve`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${email}`
+        }
+      });
+      const resData = await res.json();
+      console.log("[DEBUG] Full JSON response:", JSON.stringify(resData, null, 2));
+      if (res.status !== 200) {
+        alert(resData.error || `Error status code ${res.status}: Failed to approve payment.`);
+      }
+    } catch (err: any) {
+      alert(err.message || "Network exception.");
+    }
+  };
   
   // Navigation & Active View Options
   const [activeTab, setActiveTab] = useState<string>("landing"); // landing, courses, tutorials, pdfs, quizzes, challenges, ide, community, dashboard
@@ -196,28 +247,28 @@ export default function App() {
 
     socket.on("NEW_PAYMENT_REQUEST", (data) => {
       console.log("[Socket.IO] Event NEW_PAYMENT_REQUEST received:", data);
-      SoundManager.playNewPaymentRequest();
+      SoundManager.playNewPaymentRequest(data?.contentTitle);
       triggerToast(`New Payment proof submitted: "${data.contentTitle || "Premium License"}"!`, "info");
       fetchNotifications();
     });
 
     socket.on("PAYMENT_APPROVED", (data) => {
       console.log("[Socket.IO] Event PAYMENT_APPROVED received:", data);
-      SoundManager.playPaymentApproved();
+      SoundManager.playPaymentApproved(data?.contentTitle);
       triggerToast(`Payment APPROVED! Access unlocked: "${data.contentTitle}" 🎉`, "success");
       fetchNotifications();
     });
 
     socket.on("PAYMENT_REJECTED", (data) => {
       console.log("[Socket.IO] Event PAYMENT_REJECTED received:", data);
-      SoundManager.playPaymentRejected();
+      SoundManager.playPaymentRejected(data?.contentTitle);
       triggerToast(`Payment Rejected: "${data.contentTitle || "Premium License"}" ❌`, "error");
       fetchNotifications();
     });
 
     socket.on("ADMIN_WARNING", (data) => {
       console.log("[Socket.IO] Event ADMIN_WARNING received:", data);
-      SoundManager.playAdminWarning();
+      SoundManager.playAdminWarning(data?.message);
       triggerToast(`System warning dispatched: ${data.message}`, "warning");
       fetchNotifications();
     });
@@ -254,6 +305,33 @@ export default function App() {
       localStorage.removeItem("powercode_user");
     }
   }, [user]);
+
+  // Animated page transition loader trigger for navigation tabs
+  useEffect(() => {
+    if (activeTab === "landing") return;
+
+    let msg = "Loading Content...";
+    if (activeTab === "dashboard") {
+      msg = "Loading Dashboard...";
+    } else if (activeTab === "courses" || activeTab === "classroom") {
+      msg = "Loading Courses...";
+    } else if (activeTab === "tutorials") {
+      msg = "Loading Tutorials...";
+    } else if (activeTab === "pdfs") {
+      msg = "Loading Book Library...";
+    } else if (activeTab === "quizzes") {
+      msg = "Loading Assessments...";
+    } else if (activeTab === "challenges") {
+      msg = "Loading IDE Workbook...";
+    }
+
+    window.showPowerCodeLoader?.(msg);
+    const timeout = setTimeout(() => {
+      window.hidePowerCodeLoader?.();
+    }, 600);
+
+    return () => clearTimeout(timeout);
+  }, [activeTab]);
 
   // Fetch unread notifications
   const fetchNotifications = async () => {
@@ -470,10 +548,12 @@ export default function App() {
       }
 
       // 1. Courses
+      setGlobalLoader({ isVisible: true, message: "Loading Courses..." });
       const coursesData = await safeFetchJson("/api/courses", { headers });
       if (coursesData.courses) setCourses(coursesData.courses);
 
       // 2. Tutorials
+      setGlobalLoader({ isVisible: true, message: "Loading Tutorials..." });
       const tutorialsData = await safeFetchJson("/api/tutorials");
       if (tutorialsData.tutorials) setTutorials(tutorialsData.tutorials);
 
@@ -507,6 +587,11 @@ export default function App() {
 
     } catch (err) {
       console.error("Critical: Could not retrieve REST endpoints.", err);
+    } finally {
+      // Small simulated buffer to ensure smooth premium visual reveal
+      setTimeout(() => {
+        setGlobalLoader(prev => ({ ...prev, isVisible: false }));
+      }, 700);
     }
   };
 
@@ -829,11 +914,41 @@ export default function App() {
                     <div className="absolute right-0 mt-2 bg-[#161b22] border border-[#30363d] rounded-2xl shadow-2xl py-2 w-72 z-50 text-xs text-left" id="bell-dropdown-list">
                       <div className="px-3 py-1.5 border-b border-[#21262d] flex justify-between items-center bg-[#0d1117]/30">
                         <span className="font-extrabold text-white text-xs uppercase tracking-wide">Notifications</span>
-                        {unreadCount > 0 && (
-                          <span className="text-[9px] bg-[#ff7b00]/15 text-[#ff7b00] px-1.5 py-0.5 rounded font-extrabold">
-                            {unreadCount} NEW LATEST
-                          </span>
-                        )}
+                        <div className="flex items-center gap-2">
+                          {notifications.length > 0 && (
+                            <button
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                if (window.confirm("Are you sure you want to clear all your notifications?")) {
+                                  try {
+                                    const res = await fetch("/api/notifications", {
+                                      method: "DELETE",
+                                      headers: {
+                                        "Authorization": `Bearer ${user.email}`
+                                      }
+                                    });
+                                    const resData = await res.json();
+                                    if (resData.success) {
+                                      setNotifications([]);
+                                      setUnreadCount(0);
+                                    }
+                                  } catch (err) {
+                                    console.error("Failed to clear notifications:", err);
+                                  }
+                                }
+                              }}
+                              className="text-[9px] text-[#ff7b00] hover:text-[#ff9f43] font-bold uppercase tracking-wider bg-[#ff7b00]/10 px-1.5 py-0.5 rounded transition-all cursor-pointer"
+                              title="Delete all notifications"
+                            >
+                              Clear All
+                            </button>
+                          )}
+                          {unreadCount > 0 && (
+                            <span className="text-[9px] bg-[#ff7b00]/15 text-[#ff7b00] px-1.5 py-0.5 rounded font-extrabold">
+                              {unreadCount} NEW
+                            </span>
+                          )}
+                        </div>
                       </div>
 
                       <div className="max-h-64 overflow-y-auto divide-y divide-[#21262d]">
@@ -862,7 +977,7 @@ export default function App() {
                                   }
                                 }
                               }}
-                              className={`p-3 transition-colors cursor-pointer hover:bg-[#21262d] ${
+                              className={`p-3 transition-colors cursor-pointer hover:bg-[#21262d] relative group ${
                                 !n.isRead ? "bg-[#ff7b00]/5 border-l-2 border-l-[#ff7b00]" : "bg-transparent opacity-80"
                               }`}
                             >
@@ -870,11 +985,39 @@ export default function App() {
                                 <span className={`font-extrabold text-[10px] uppercase ${!n.isRead ? "text-slate-100" : "text-gray-400"}`}>
                                   {n.title || "Academy Alert"}
                                 </span>
-                                <span className="text-[8px] text-gray-500 font-mono">
-                                  {n.createdAt ? new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Just Info"}
-                                </span>
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[8px] text-gray-500 font-mono">
+                                    {n.createdAt ? new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Just Info"}
+                                  </span>
+                                  <button
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      try {
+                                        const res = await fetch(`/api/notifications/${n.id}`, {
+                                          method: "DELETE",
+                                          headers: {
+                                            "Authorization": `Bearer ${user.email}`
+                                          }
+                                        });
+                                        const resData = await res.json();
+                                        if (resData.success) {
+                                          setNotifications(prev => prev.filter(item => item.id !== n.id));
+                                          if (!n.isRead) {
+                                            setUnreadCount(c => Math.max(0, c - 1));
+                                          }
+                                        }
+                                      } catch (err) {
+                                        console.error("Failed to delete notification item:", err);
+                                      }
+                                    }}
+                                    className="p-1 text-gray-500 hover:text-red-500 rounded transition-colors"
+                                    title="Delete notification"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                </div>
                               </div>
-                              <p className="text-[10px] text-gray-400 mt-1 leading-relaxed font-sans font-normal">
+                              <p className="text-[10px] text-gray-400 mt-1 leading-relaxed font-sans font-normal pr-5">
                                 {n.message}
                               </p>
                               {!n.isRead && (
@@ -2497,7 +2640,7 @@ export default function App() {
             />
             <span className="font-extrabold text-white text-[11px] uppercase tracking-wider">{siteSettings.platformName}</span>
           </div>
-          <p className="text-[11px]">Powered by PowerCode Academy Engine • Neon Postgres SQL. © 2026. All rights reserved.</p>
+          <p className="text-[11px]">Powered by PowerCode Academy. © 2026. All rights reserved.</p>
         </div>
       </footer>
 
@@ -2858,6 +3001,7 @@ export default function App() {
                   }
                   
                   setIsSubmitAccessLoading(true);
+                  window.showPowerCodeLoader?.("Processing Payment...");
                   try {
                     const response = await fetch("/api/pdf-purchases", {
                       method: "POST",
@@ -2882,9 +3026,11 @@ export default function App() {
                       fetchAllData();
                     } else {
                       alert(resJson.error || "Something failed transmitting proof details.");
+                      window.hidePowerCodeLoader?.();
                     }
                   } catch (err: any) {
                     alert(`Network error transmitting details: ${err?.message}`);
+                    window.hidePowerCodeLoader?.();
                   } finally {
                     setIsSubmitAccessLoading(false);
                   }
@@ -2935,6 +3081,9 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {/* Branded Premium Loading Screen Overlay */}
+      <LoadingScreen isVisible={globalLoader.isVisible} message={globalLoader.message} />
 
     </div>
   );

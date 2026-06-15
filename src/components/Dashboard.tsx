@@ -18,7 +18,7 @@ interface DashboardProps {
   triggerToast?: (message: string, type?: string) => void;
 }
 
-type AdminTab = "stats" | "courses" | "tutorials" | "pdfs" | "challenges" | "quizzes" | "certificates" | "announcements" | "paths" | "settings" | "purchases" | "trash" | "logs" | "sounds" | "transactions" | "media";
+type AdminTab = "stats" | "courses" | "tutorials" | "pdfs" | "challenges" | "quizzes" | "certificates" | "announcements" | "paths" | "settings" | "purchases" | "trash" | "logs" | "sounds" | "transactions" | "media" | "users";
 
 export default function Dashboard({ user, onViewCertificate, coursesList, onEnrollCourse, t, onUpdateUser, triggerToast }: DashboardProps) {
   const isAdmin = user.role === "ADMIN";
@@ -489,6 +489,7 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
     if (!file) return;
 
     setUploadProgress(`Processing ${file.name}...`);
+    window.showPowerCodeLoader?.("Uploading Content...");
 
     try {
       if (fileType === "image") {
@@ -508,11 +509,19 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
                 fileType: "image",
                 fileData: base64Url
               })
-            }).catch(err => console.warn("Background upload sync bypassed", err));
+            }).catch(err => console.warn("Background upload sync bypassed", err))
+              .finally(() => {
+                setTimeout(() => {
+                  window.hidePowerCodeLoader?.();
+                }, 400);
+              });
+          } else {
+            window.hidePowerCodeLoader?.();
           }
         };
         reader.onerror = () => {
           setUploadProgress("❌ Failed to parse local image asset.");
+          window.hidePowerCodeLoader?.();
         };
         reader.readAsDataURL(file);
       } else {
@@ -532,9 +541,13 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
         } else {
           setUploadProgress(`❌ File upload pipeline error.`);
         }
+        setTimeout(() => {
+          window.hidePowerCodeLoader?.();
+        }, 400);
       }
     } catch {
       setUploadProgress(`❌ Network pipeline connection error.`);
+      window.hidePowerCodeLoader?.();
     } finally {
       setTimeout(() => setUploadProgress(""), 4500);
     }
@@ -1262,7 +1275,7 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
           
           {/* Collapsible/Tab navigation rows for Admin panel */}
           <div className="flex flex-wrap gap-1.5 border-b border-[#30363d] pb-3" id="admin-tabs">
-            {(["stats", "courses", "tutorials", "pdfs", "challenges", "quizzes", "certificates", "announcements", "paths", "settings", "purchases", "sounds", "media", "transactions", "trash", "logs"] as AdminTab[]).map((tab) => (
+            {(["stats", "courses", "tutorials", "pdfs", "challenges", "quizzes", "certificates", "announcements", "paths", "settings", "purchases", "sounds", "media", "transactions", "trash", "logs", "users"] as AdminTab[]).map((tab) => (
               <button
                 key={tab}
                 onClick={() => { setActiveAdminTab(tab); setFeedback(""); }}
@@ -1273,7 +1286,7 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
                 }`}
                 id={`admin-tab-trigger-${tab}`}
               >
-                {tab === "pdfs" ? "PDF Books" : tab === "paths" ? "Learning Paths" : tab === "trash" ? "Trash Bin" : tab === "logs" ? "Activity Logs" : tab === "purchases" ? "MoMo Purchases" : tab === "sounds" ? "Notification Sounds" : tab === "transactions" ? "Transaction History" : tab === "media" ? "Content Media Manager" : tab}
+                {tab === "pdfs" ? "PDF Books" : tab === "paths" ? "Learning Paths" : tab === "trash" ? "Trash Bin" : tab === "logs" ? "Activity Logs" : tab === "purchases" ? "MoMo Purchases" : tab === "sounds" ? "Notification Sounds" : tab === "transactions" ? "Transaction History" : tab === "media" ? "Content Media Manager" : tab === "users" ? "Manage Users" : tab}
               </button>
             ))}
           </div>
@@ -2821,52 +2834,73 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
                   </div>
                 </div>
 
-                <div className="border-t border-[#30363d] pt-4">
-                  {/* Password reset form */}
-                  <div className="space-y-2 max-w-md">
-                    <label className="text-[11px] text-gray-400 uppercase font-bold text-xs block">Update Admin Password:</label>
-                    <div className="flex gap-2">
+                <div className="border-t border-[#30363d] pt-4 space-y-4">
+                  <h5 className="text-xs font-bold text-[#ff7b00] uppercase tracking-wide">Update Credentials (Username, Email, Password)</h5>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-gray-400 uppercase font-bold">New Username / Full Name:</label>
+                      <input
+                        type="text"
+                        defaultValue={user.name}
+                        id="admin-username-field"
+                        className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg p-2 text-xs text-white outline-none"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-gray-400 uppercase font-bold">New Email Address:</label>
+                      <input
+                        type="email"
+                        defaultValue={user.email}
+                        id="admin-email-field"
+                        className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg p-2 text-xs text-white outline-none font-mono"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] text-gray-400 uppercase font-bold">New Password (Optional):</label>
                       <input
                         type="password"
-                        placeholder="Enter secure new password..."
+                        placeholder="Leave blank to keep current..."
                         id="admin-new-password-field"
-                        className="flex-1 bg-[#0d1117] border border-[#30363d] rounded-lg p-2 text-xs text-white outline-none font-mono"
+                        className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg p-2 text-xs text-white outline-none font-mono"
                       />
-                      <button
-                        onClick={async () => {
-                          const inputField = (document.getElementById("admin-new-password-field") as HTMLInputElement);
-                          const passVal = inputField?.value;
-                          if (!passVal) {
-                            alert("Please type a new password first.");
-                            return;
-                          }
-                          setFeedback("Committing credential password update...");
-                          try {
-                            const res = await fetch("/api/users/change-password", {
-                              method: "POST",
-                              headers: {
-                                "Content-Type": "application/json",
-                                "Authorization": `Bearer ${user.email}`
-                              },
-                              body: JSON.stringify({ newPassword: passVal })
-                            });
-                            const data = await res.json();
-                            if (data.success) {
-                              setFeedback("✨ Credentials password updated successfully! Please note it down.");
-                              inputField.value = "";
-                            } else {
-                              setFeedback(`❌ Error: ${data.error}`);
-                            }
-                          } catch {
-                            setFeedback("❌ Failed to update password.");
-                          }
-                        }}
-                        className="bg-[#ff7b00] hover:bg-[#e66f00] text-xs font-bold text-white px-4 py-2 rounded-lg cursor-pointer transition-colors shrink-0"
-                      >
-                        Change Password
-                      </button>
                     </div>
                   </div>
+                  <button
+                    onClick={async () => {
+                      const name = (document.getElementById("admin-username-field") as HTMLInputElement)?.value;
+                      const email = (document.getElementById("admin-email-field") as HTMLInputElement)?.value;
+                      const password = (document.getElementById("admin-new-password-field") as HTMLInputElement)?.value;
+                      
+                      setFeedback("Applying admin credentials updates...");
+                      try {
+                        const res = await fetch("/api/users/profile", {
+                          method: "POST",
+                          headers: {
+                            "Content-Type": "application/json",
+                            "Authorization": `Bearer ${user.email}`
+                          },
+                          body: JSON.stringify({ name, email, password: password || undefined })
+                        });
+                        const data = await res.json();
+                        if (data.success && data.user) {
+                          setFeedback("✨ Credentials saved successfully!");
+                          const passwordField = document.getElementById("admin-new-password-field") as HTMLInputElement;
+                          if (passwordField) passwordField.value = "";
+                          if (onUpdateUser) {
+                            onUpdateUser(data.user);
+                          }
+                          loadPlatformData();
+                        } else {
+                          setFeedback(`❌ Error: ${data.error || "Execution failed"}`);
+                        }
+                      } catch (err: any) {
+                        setFeedback(`❌ Connection issue: ${err.message}`);
+                      }
+                    }}
+                    className="bg-[#ff7b00] hover:bg-[#e66f00] text-xs font-bold text-white px-5 py-2 rounded-lg cursor-pointer transition-colors"
+                  >
+                    Save Credentials Changes
+                  </button>
                 </div>
               </div>
 
@@ -2928,6 +2962,94 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* TAB: USER ACCOUNT MANAGEMENT PORTS */}
+          {activeAdminTab === "users" && (
+            <div className="bg-[#161b22] border border-[#30363d] p-5 rounded-2xl space-y-4 font-sans animate-fade-in" id="admin-users-tab">
+              <div className="border-b border-[#30363d] pb-3 flex justify-between items-center bg-[#0d1117]/30 p-3 rounded-xl border border-[#21262d] mb-4">
+                <div>
+                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Users className="w-4 h-4 text-[#ff7b00]" />
+                    USER ACCOUNT MANAGEMENT
+                  </h4>
+                  <p className="text-[11px] text-gray-400 mt-0.5">Edit, audit profiles or permanently delete student or pilot records from both Memory & PostgreSQL.</p>
+                </div>
+                <div className="text-xs text-[#8b949e]">
+                  Active Registered Accounts: <span className="font-bold text-white">{allUsersList.length}</span>
+                </div>
+              </div>
+
+              <div className="max-h-[500px] overflow-y-auto divide-y divide-[#21262d] pr-1">
+                {allUsersList.length === 0 ? (
+                  <div className="text-center py-6 text-gray-500 text-xs italic">
+                    No registered user portfolios found.
+                  </div>
+                ) : (
+                  allUsersList.map((usr) => (
+                    <div key={usr.id} className="py-3 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                      <div className="flex items-center gap-3">
+                        <img 
+                          src={usr.avatarUrl || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100"} 
+                          alt={usr.name} 
+                          referrerPolicy="no-referrer"
+                          className="w-10 h-10 rounded-xl object-cover bg-[#0d1117] border border-[#30363d]" 
+                        />
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-extrabold text-white">{usr.name}</span>
+                            <span className={`text-[9px] font-extrabold px-1.5 py-0.2 rounded uppercase ${
+                              usr.role === "ADMIN" ? "bg-red-500/10 text-red-400 border border-red-500/20" : "bg-[#21262d] text-[#8b949e]"
+                            }`}>
+                              {usr.role}
+                            </span>
+                          </div>
+                          <p className="text-[10px] text-gray-400 font-mono mt-0.5">{usr.email}</p>
+                          <div className="flex items-center gap-2 mt-1 text-[9px] text-[#8b949e]">
+                            <span>Streak: <strong className="text-[#ff7b00]">{usr.learningStreak || 0}d</strong></span>
+                            <span>•</span>
+                            <span>Score: <strong className="text-white">{usr.score || 0} pts</strong></span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {usr.id !== user.id ? (
+                        <button
+                          onClick={async () => {
+                            if (window.confirm(`Are you sure you want to permanently delete user account "${usr.name}" (${usr.email})? This action is irreversible.`)) {
+                              try {
+                                const response = await fetch(`/api/users/${usr.id}`, {
+                                  method: "DELETE",
+                                  headers: {
+                                    "Authorization": `Bearer ${user.email}`
+                                  }
+                                });
+                                const resData = await response.json();
+                                if (resData.success) {
+                                  showToast(resData.message || "User successfully deleted.", "success");
+                                  setAllUsersList(prev => prev.filter(u => u.id !== usr.id));
+                                } else {
+                                  showToast(resData.error || "Failed to delete user", "error");
+                                }
+                              } catch (err) {
+                                console.error("Error deleting user:", err);
+                                showToast("Failed to delete user account, network error.", "error");
+                              }
+                            }
+                          }}
+                          className="bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white border border-red-500/30 font-bold text-[10px] px-2.5 py-1.5 rounded-lg transition-all flex items-center gap-1 cursor-pointer"
+                        >
+                          <Trash className="w-3 h-3" />
+                          Delete User
+                        </button>
+                      ) : (
+                        <span className="text-[10px] text-[#8b949e] italic font-mono pr-2">Your Active Session</span>
+                      )}
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           )}
 
@@ -3085,6 +3207,12 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
                                         onClick={async () => {
                                           if (!confirm(`Are you sure you want to APPROVED payment for "${p.contentTitle}"? This will instantly trigger an in-app and push notification to the student.`)) return;
                                           try {
+                                            // Empty payload for PUT request as per current API specs
+                                            const payload = {};
+                                            console.log("[DEBUG] Approve Click Handler: Initiated");
+                                            console.log("[DEBUG] Request Payload:", JSON.stringify(payload));
+                                            console.log("[DEBUG] Exact Payment ID being sent to /api/payments/approve:", p.id);
+
                                             const res = await fetch(`/api/payments/${p.id}/approve`, {
                                               method: "PUT",
                                               headers: {
@@ -3092,7 +3220,15 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
                                                 "Authorization": `Bearer ${user.email}`
                                               }
                                             });
+
                                             const resData = await res.json();
+                                            console.log("[DEBUG] Full JSON response:", JSON.stringify(resData, null, 2));
+
+                                            if (res.status !== 200) {
+                                              alert(resData.error || `Error status code ${res.status}: Failed to approve payment.`);
+                                              return;
+                                            }
+
                                             if (resData.success) {
                                               setFeedback(`✅ Verified! Payment approved and premium access unlocked for ${p.userName}.`);
                                               loadPlatformData();
@@ -4017,6 +4153,75 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
                     </div>
                   </div>
 
+                  {/* Student profile credentials update */}
+                  <div className="space-y-3 bg-[#0d1117] p-4 rounded-xl border border-[#21262d] mt-4 shadow-inner">
+                    <h5 className="text-[10px] font-bold text-[#ff7b00] uppercase tracking-wider block">Update Your Login Credentials</h5>
+                    <div className="space-y-3">
+                      <div className="space-y-1">
+                        <label className="text-[9px] text-[#8b949e] uppercase font-bold block">New Username / Full Name:</label>
+                        <input
+                          type="text"
+                          defaultValue={user.name}
+                          id="student-username-field"
+                          className="w-full bg-[#161b22] border border-[#30363d] focus:border-[#ff7b00] text-xs rounded p-2 text-white outline-none"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] text-[#8b949e] uppercase font-bold block">New Email Address:</label>
+                        <input
+                          type="email"
+                          defaultValue={user.email}
+                          id="student-email-field"
+                          className="w-full bg-[#161b22] border border-[#30363d] focus:border-[#ff7b00] text-xs rounded p-2 text-white outline-none font-mono"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] text-[#8b949e] uppercase font-bold block">New Password (Optional):</label>
+                        <input
+                          type="password"
+                          placeholder="Type a secure new password..."
+                          id="student-new-password-field"
+                          className="w-full bg-[#161b22] border border-[#30363d] focus:border-[#ff7b00] text-xs rounded p-2 text-white outline-none font-mono"
+                        />
+                      </div>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        const name = (document.getElementById("student-username-field") as HTMLInputElement)?.value;
+                        const email = (document.getElementById("student-email-field") as HTMLInputElement)?.value;
+                        const password = (document.getElementById("student-new-password-field") as HTMLInputElement)?.value;
+                        
+                        setFeedback("Applying credentials updates...");
+                        try {
+                          const res = await fetch("/api/users/profile", {
+                            method: "POST",
+                            headers: {
+                              "Content-Type": "application/json",
+                              "Authorization": `Bearer ${user.email}`
+                            },
+                            body: JSON.stringify({ name, email, password: password || undefined })
+                          });
+                          const data = await res.json();
+                          if (data.success && data.user) {
+                            setFeedback("✨ Your student credentials have been saved and updated successfully.");
+                            const passwordField = document.getElementById("student-new-password-field") as HTMLInputElement;
+                            if (passwordField) passwordField.value = "";
+                            if (onUpdateUser) {
+                              onUpdateUser(data.user);
+                            }
+                          } else {
+                            setFeedback(`❌ Error to update: ${data.error || "Save credentials failed"}`);
+                          }
+                        } catch (err: any) {
+                          setFeedback(`❌ Connection issue: ${err.message}`);
+                        }
+                      }}
+                      className="bg-[#ff7b00] hover:bg-[#e66f00] text-white font-extrabold text-[10.5px] w-full py-2 rounded-lg cursor-pointer transition-all mt-1"
+                    >
+                      Update Profile Credentials
+                    </button>
+                  </div>
+
                   {/* Notification Settings Toggle Channels Panel */}
                   <div className="bg-[#0d1117] border border-[#21262d] rounded-xl p-4 space-y-3.5 mt-4" id="user-profile-notifications-panel">
                     <h4 className="text-xs font-bold text-white flex items-center gap-1.5 uppercase font-mono tracking-wide">
@@ -4223,8 +4428,8 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
                           <div className="text-[10px] text-gray-500 font-normal flex items-center gap-1.5 mt-0.5">
                             <span>Phone: {tx.phone || "N/A"}</span>
                             <span>•</span>
-                            <span>Proof: {tx.cloudinaryProofUrl ? (
-                              <a href={tx.cloudinaryProofUrl} target="_blank" rel="noreferrer" className="text-orange-400 hover:underline inline-flex items-center gap-0.5 font-bold">
+                            <span>Proof: {(tx.proofUrl || tx.cloudinaryProofUrl) ? (
+                              <a href={tx.proofUrl || tx.cloudinaryProofUrl} target="_blank" rel="noreferrer" className="text-orange-400 hover:underline inline-flex items-center gap-0.5 font-bold">
                                 View Proof ↗
                               </a>
                             ) : "None"}</span>
@@ -4236,7 +4441,7 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
                           </span>
                         </td>
                         <td className="p-3 text-right text-white font-mono font-bold">
-                          {tx.amount ? Number(tx.amount).toLocaleString() : "0"} UGX
+                          {(tx.amountPaid || tx.amount) ? Number(tx.amountPaid || tx.amount).toLocaleString() : "0"} UGX
                         </td>
                         <td className="p-3 text-center">
                           <span className={`inline-block text-[10px] font-bold font-mono px-2 py-0.5 rounded-full ${

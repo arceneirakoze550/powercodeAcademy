@@ -114,6 +114,7 @@ export default function ContentMediaManager({ user, setFeedback, triggerToast }:
 
     setUploadingId(item.id);
     setFeedback(`Uploading "${file.name}" to Cloudinary simulator sandbox...`);
+    window.showPowerCodeLoader?.("Uploading Content...");
 
     const reader = new FileReader();
     reader.onload = async () => {
@@ -178,6 +179,9 @@ export default function ContentMediaManager({ user, setFeedback, triggerToast }:
         alert("Upload parsing failure: " + err.message);
       } finally {
         setUploadingId(null);
+        setTimeout(() => {
+          window.hidePowerCodeLoader?.();
+        }, 400);
       }
     };
     reader.readAsDataURL(file);

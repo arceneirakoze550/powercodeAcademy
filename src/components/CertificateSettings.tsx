@@ -71,7 +71,7 @@ export default function CertificateSettings({ user, onViewCertificate, dbStatus 
 
       const data = await res.json();
       if (res.ok && data.success) {
-        showFeedback("✨ Official certificate signature & seal stored permanently in the Neon database!", true);
+        showFeedback("✨ Official certificate signature & seal stored permanently inside PowerCode systems!", true);
       } else {
         showFeedback(`❌ Failed to store: ${data.error || "Unknown server error"}`, false);
       }
@@ -90,6 +90,7 @@ export default function CertificateSettings({ user, onViewCertificate, dbStatus 
       return;
     }
 
+    window.showPowerCodeLoader?.("Uploading Content...");
     const reader = new FileReader();
     reader.onload = (event) => {
       const base64Url = event.target?.result as string;
@@ -111,11 +112,19 @@ export default function CertificateSettings({ user, onViewCertificate, dbStatus 
             fileType: "image",
             fileData: base64Url
           })
-        }).catch(err => console.warn("Background upload sync bypassed", err));
+        }).catch(err => console.warn("Background upload sync bypassed", err))
+          .finally(() => {
+            setTimeout(() => {
+              window.hidePowerCodeLoader?.();
+            }, 400);
+          });
+      } else {
+        window.hidePowerCodeLoader?.();
       }
     };
     reader.onerror = () => {
       showFeedback("❌ Error reading the uploaded file.", false);
+      window.hidePowerCodeLoader?.();
     };
     reader.readAsDataURL(file);
   };
@@ -172,7 +181,7 @@ export default function CertificateSettings({ user, onViewCertificate, dbStatus 
               : "bg-yellow-500/10 text-yellow-500 border border-yellow-500/25"
           }`}>
             <span className={`h-1.5 w-1.5 rounded-full ${dbStatus.connected ? "bg-green-400 animate-pulse" : "bg-yellow-500"}`} />
-            <span>{dbStatus.connected ? "Neon postgres Connected" : "Local fallback DB Active"}</span>
+            <span>{dbStatus.connected ? "PowerCode Secure Database Client connected" : "PowerCode local secure instance active"}</span>
           </div>
         )}
       </div>
