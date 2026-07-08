@@ -3,7 +3,7 @@ import {
   Sparkles, Cpu, BookOpen, FileText, Terminal, Flame, Info, Menu, X, Globe,
   ChevronDown, LogOut, Award, MessageSquare, Plus, Search, Bookmark,
   HelpCircle, Send, ThumbsUp, Check, Lock, Unlock, ExternalLink, HelpCircle as FaqIcon,
-  ChevronLeft, ChevronRight, Download, Sun, Moon, Wifi, WifiOff, Trash2
+  ChevronLeft, ChevronRight, Download, Sun, Moon, Wifi, WifiOff, Trash2, AlertTriangle
 } from "lucide-react";
 
 import { useTheme } from "./utils/ThemeContext";
@@ -26,6 +26,57 @@ declare global {
     hidePowerCodeLoader?: () => void;
   }
 }
+
+const getEmbedUrl = (url: string): string => {
+  if (!url) return "";
+  
+  // 1. YouTube watch, share, short, embed links
+  if (url.includes("youtube.com") || url.includes("youtu.be")) {
+    let videoId = "";
+    const regExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+    const match = url.match(regExp);
+    if (match && match[2] && match[2].length === 11) {
+      videoId = match[2];
+    } else {
+      try {
+        const parts = url.split("/");
+        const lastPart = parts[parts.length - 1];
+        if (lastPart && lastPart.length === 11) {
+          videoId = lastPart;
+        } else if (lastPart && lastPart.includes("?")) {
+          const subparts = lastPart.split("?");
+          if (subparts[0] && subparts[0].length === 11) {
+            videoId = subparts[0];
+          }
+        }
+      } catch (err) {}
+    }
+    if (videoId) {
+      return `https://www.youtube.com/embed/${videoId}`;
+    }
+  }
+  
+  // 2. Vimeo links
+  if (url.includes("vimeo.com")) {
+    const regExp = /vimeo\.com\/(?:video\/)?([0-9]+)/;
+    const match = url.match(regExp);
+    if (match && match[1]) {
+      return `https://player.vimeo.com/video/${match[1]}`;
+    }
+  }
+  
+  return url;
+};
+
+const isEmbeddableVideoUrl = (url: string): boolean => {
+  if (!url) return false;
+  return (
+    url.includes("youtube.com") ||
+    url.includes("youtu.be") ||
+    url.includes("vimeo.com") ||
+    url.includes("embed")
+  );
+};
 
 export default function App() {
   // Confirmation Modal state
@@ -158,6 +209,8 @@ export default function App() {
   const [communityPosts, setCommunityPosts] = useState<CommunityPost[]>([]);
   const [pdfPurchases, setPdfPurchases] = useState<any[]>([]);
   const [purchasePdfItem, setPurchasePdfItem] = useState<any | null>(null);
+  const [purchaseCourseItem, setPurchaseCourseItem] = useState<any | null>(null);
+  const [selectedPdfDetails, setSelectedPdfDetails] = useState<PdfBook | null>(null);
   const [paymentPhone, setPaymentPhone] = useState<string>("");
   const [paymentMethod, setPaymentMethod] = useState<"MTN" | "Airtel">("MTN");
   const [isSubmitAccessLoading, setIsSubmitAccessLoading] = useState<boolean>(false);
@@ -231,6 +284,110 @@ export default function App() {
   // Active Lesson study parameters
   const [activeCoursePath, setActiveCoursePath] = useState<Course | null>(null);
   const [activeStepLesson, setActiveStepLesson] = useState<{ id: number; title: string; content: string; videoUrl: string; isPreviewAllowed: boolean } | null>(null);
+
+  // Classroom Video Player Error/Fallback States
+  const [classroomVideoError, setClassroomVideoError] = useState<string | null>(null);
+  const [classroomVideoLoading, setClassroomVideoLoading] = useState<boolean>(false);
+  const [classroomVideoFallbackActive, setClassroomVideoFallbackActive] = useState<boolean>(false);
+  const [classroomVideoRetryCount, setClassroomVideoRetryCount] = useState<number>(0);
+  const [isRetrying, setIsRetrying] = useState<boolean>(false);
+
+  // Validate lesson video source validity
+  useEffect(() => {
+    if (!activeStepLesson) {
+      setClassroomVideoError(null);
+      setClassroomVideoLoading(false);
+      setClassroomVideoFallbackActive(false);
+      setClassroomVideoRetryCount(0);
+      setIsRetrying(false);
+      return;
+    }
+    
+    setClassroomVideoError(null);
+    setClassroomVideoLoading(true);
+    setClassroomVideoFallbackActive(false);
+    setClassroomVideoRetryCount(0);
+    setIsRetrying(false);
+
+    const url = activeStepLesson.videoUrl;
+    if (!url || url.trim() === "") {
+      setClassroomVideoError("Error 153: Video player configuration error. The video source URL is empty or undefined.");
+      setClassroomVideoLoading(false);
+      return;
+    }
+
+    // Check mixed content blocks
+    if (window.location.protocol === "https:" && url.startsWith("http://")) {
+      setClassroomVideoError("Error 153: Mixed Content Blocked. Loading HTTP video inside an HTTPS secure environment is blocked by your browser.");
+      setClassroomVideoLoading(false);
+      return;
+    }
+
+    // Basic syntax/protocol validation
+    if (!url.startsWith("/") && !url.startsWith("http://") && !url.startsWith("https://") && !url.startsWith("data:")) {
+      setClassroomVideoError("Error 153: Invalid URL format. The video source must be a valid path, direct stream, or embeddable URL.");
+      setClassroomVideoLoading(false);
+      return;
+    }
+
+    // Pre-validate check with fetch for non-embed streams if online
+    if (!isEmbeddableVideoUrl(url) && !isOfflineSimulated) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+
+      fetch(url, { method: "HEAD", signal: controller.signal, mode: "no-cors" })
+        .then(() => {
+          clearTimeout(timeoutId);
+          setClassroomVideoLoading(false);
+        })
+        .catch((err) => {
+          clearTimeout(timeoutId);
+          console.warn("[Video Precheck] Fetch HEAD failed, continuing standard load:", err);
+          setClassroomVideoLoading(false);
+        });
+    } else {
+      setClassroomVideoLoading(false);
+    }
+  }, [activeStepLesson, isOfflineSimulated]);
+
+  const handleVideoLoadError = (errorMessage: string) => {
+    if (classroomVideoFallbackActive) {
+      setClassroomVideoError(errorMessage);
+      return;
+    }
+
+    setClassroomVideoLoading(true);
+    setIsRetrying(true);
+    setClassroomVideoError("Error 153: Player instance configuration failed. Initializing automatic recovery sequence...");
+
+    let currentAttempt = 1;
+    setClassroomVideoRetryCount(1);
+
+    const runAttempt = () => {
+      if (currentAttempt <= 3) {
+        setClassroomVideoError(`Error 153: Player load failed. Automatically refreshing player instance... (Retry ${currentAttempt}/3)`);
+        setClassroomVideoRetryCount(currentAttempt);
+        
+        setTimeout(() => {
+          currentAttempt++;
+          if (currentAttempt <= 3) {
+            runAttempt();
+          } else {
+            // After 3 automatic retries, switch to the manual fallback mechanism
+            setIsRetrying(false);
+            setClassroomVideoLoading(false);
+            // Presenting the manual fallback mechanism
+            setClassroomVideoError("Error 153: Player instance failed to resolve after 3 automatic retries. Please switch to the manual fallback stream to continue.");
+            setClassroomVideoRetryCount(0);
+          }
+        }, 1200);
+      }
+    };
+
+    setTimeout(() => {
+      runAttempt();
+    }, 1000);
+  };
 
   // Helper i18n translator
   const t = (key: string): string => {
@@ -554,7 +711,7 @@ export default function App() {
 
       // 2. Tutorials
       setGlobalLoader({ isVisible: true, message: "Loading Tutorials..." });
-      const tutorialsData = await safeFetchJson("/api/tutorials");
+      const tutorialsData = await safeFetchJson("/api/tutorials", { headers });
       if (tutorialsData.tutorials) setTutorials(tutorialsData.tutorials);
 
       // 3. PDFs
@@ -562,7 +719,7 @@ export default function App() {
       if (pdfsData.pdfs) setPdfs(pdfsData.pdfs);
 
       // 4. Quizzes
-      const quizzesData = await safeFetchJson("/api/quizzes");
+      const quizzesData = await safeFetchJson("/api/quizzes", { headers });
       if (quizzesData.quizzes) setQuizzes(quizzesData.quizzes);
 
       // 5. Challenges
@@ -604,6 +761,14 @@ export default function App() {
   const handleEnrollCourse = async (courseId: number) => {
     if (!user) {
       setShowLogin(true);
+      return;
+    }
+
+    const course = courses.find(c => c.id === courseId);
+    if (!course) return;
+
+    if (course.isPremium && !course.hasPremiumAccess) {
+      setPurchaseCourseItem(course);
       return;
     }
 
@@ -1555,6 +1720,14 @@ export default function App() {
                           >
                             Enter class
                           </button>
+                        ) : c.isPremium && !c.hasPremiumAccess ? (
+                          <button
+                            onClick={() => handleEnrollCourse(c.id)}
+                            className="bg-gradient-to-r from-amber-600 to-[#ff7b00] hover:from-amber-700 hover:to-[#e66f00] text-white text-xs font-bold py-1.5 px-4.5 rounded-lg transition-colors cursor-pointer border-0 flex items-center gap-1.5 shadow-md shadow-orange-950/20"
+                          >
+                            <Lock className="w-3 h-3" />
+                            <span>Unlock Class</span>
+                          </button>
                         ) : (
                           <button
                             onClick={() => handleEnrollCourse(c.id)}
@@ -1664,6 +1837,14 @@ export default function App() {
                           >
                             Enter class
                           </button>
+                        ) : c.isPremium && !c.hasPremiumAccess ? (
+                          <button
+                            onClick={() => handleEnrollCourse(c.id)}
+                            className="bg-gradient-to-r from-amber-600 to-[#ff7b00] hover:from-amber-700 hover:to-[#e66f00] text-white text-xs font-bold py-1.5 px-4.5 rounded-lg transition-colors cursor-pointer border-0 flex items-center gap-1.5 shadow-md shadow-orange-950/20"
+                          >
+                            <Lock className="w-3 h-3" />
+                            <span>Unlock Class</span>
+                          </button>
                         ) : (
                           <button
                             onClick={() => handleEnrollCourse(c.id)}
@@ -1722,13 +1903,15 @@ export default function App() {
 
                     {tut.embedded_video_url && (
                       <div className="bg-black rounded-xl border border-[#21262d] overflow-hidden shadow-inner relative w-full aspect-video">
-                        {tut.embedded_video_url.includes("embed") || tut.embedded_video_url.includes("youtube.com") || tut.embedded_video_url.includes("youtu.be") || tut.embedded_video_url.includes("vimeo.com") ? (
+                        {/* PowerCode Brand Watermark */}
+                        <div className="absolute top-3 right-3 bg-black/70 backdrop-blur-sm px-2.5 py-1 rounded text-[9px] font-mono tracking-widest text-[#ff7b00] border border-[#ff7b00]/30 select-none pointer-events-none z-10 font-bold uppercase flex items-center gap-1.5">
+                          <Sparkles className="w-2.5 h-2.5 text-[#ff7b00] animate-pulse" />
+                          <span>PowerCode Academy</span>
+                        </div>
+
+                        {isEmbeddableVideoUrl(tut.embedded_video_url) ? (
                           <iframe
-                            src={
-                              tut.embedded_video_url.includes("youtube.com") && !tut.embedded_video_url.includes("/embed/")
-                                ? tut.embedded_video_url.replace("watch?v=", "embed/")
-                                : tut.embedded_video_url
-                            }
+                            src={getEmbedUrl(tut.embedded_video_url)}
                             title={tut.title}
                             className="absolute inset-0 w-full h-full border-0"
                             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -1837,7 +2020,23 @@ export default function App() {
                       </div>
 
                       <h4 className="text-sm font-bold text-white line-clamp-1">{pdf.title}</h4>
-                      <p className="text-xs text-slate-500">Author: {pdf.author} </p>
+                      
+                      <div className="space-y-1.5">
+                        <p className="text-[11px] text-gray-300 font-semibold">Author: <span className="text-gray-400">{pdf.author}</span></p>
+                        {pdf.publishedDate && (
+                          <p className="text-[10px] text-gray-400 font-mono">Published: {pdf.publishedDate}</p>
+                        )}
+                        <p className="text-xs text-gray-400 line-clamp-2 leading-relaxed">
+                          {pdf.description || "Access instant, step-by-step downloadable guidelines and technical blueprints from PowerCode Academy."}
+                        </p>
+                        <button
+                          type="button"
+                          onClick={() => setSelectedPdfDetails(pdf)}
+                          className="text-[10px] text-[#ff7b00] hover:underline font-bold flex items-center gap-0.5 cursor-pointer mt-1 font-mono uppercase"
+                        >
+                          Read More & Details →
+                        </button>
+                      </div>
                     </div>
 
                     <div className="pt-4 border-t border-[#21262d] mt-5 flex justify-between items-center">
@@ -1897,8 +2096,8 @@ export default function App() {
                               : "bg-[#ff7b00] hover:bg-[#e66f00] text-white"
                           } text-xs font-bold py-1.5 px-3.5 rounded flex items-center gap-1 cursor-pointer transition-colors`}
                         >
-                          <ExternalLink className="w-3.5 h-3.5" />
-                          <span>{isOfflineSimulated && !isPdfCached(pdf.id) ? "Offline-Uncached" : "Open PDF"}</span>
+                          <Download className="w-3.5 h-3.5" />
+                          <span>{isOfflineSimulated && !isPdfCached(pdf.id) ? "Offline-Uncached" : "Download PDF"}</span>
                         </a>
                       )}
                     </div>
@@ -2099,13 +2298,120 @@ export default function App() {
               {activeStepLesson ? (
                 <div className="space-y-6">
                   {/* Visual HTML5 Video wrapper */}
-                  <div className="bg-black rounded-xl border border-[#30363d] overflow-hidden aspect-video relative max-h-[380px] mx-auto flex items-center justify-center">
-                    <video
-                      key={activeStepLesson.videoUrl}
-                      src={activeStepLesson.videoUrl}
-                      controls
-                      className="w-full h-full object-cover"
-                    />
+                  <div className="bg-black rounded-xl border border-[#30363d] overflow-hidden aspect-video relative max-h-[380px] mx-auto flex items-center justify-center w-full">
+                    {/* PowerCode Brand Watermark */}
+                    <div className="absolute top-3 right-3 bg-black/70 backdrop-blur-sm px-2.5 py-1 rounded text-[9px] font-mono tracking-widest text-[#ff7b00] border border-[#ff7b00]/30 select-none pointer-events-none z-10 font-bold uppercase flex items-center gap-1.5">
+                      <Sparkles className="w-2.5 h-2.5 text-[#ff7b00] animate-pulse" />
+                      <span>PowerCode Academy</span>
+                    </div>
+
+                    {classroomVideoError ? (
+                      <div className="absolute inset-0 bg-[#0d1117] flex flex-col items-center justify-center p-6 text-center space-y-4 z-20">
+                        <div className="w-12 h-12 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center text-red-500 animate-pulse">
+                          <AlertTriangle className="w-6 h-6" />
+                        </div>
+                        <div className="space-y-1.5 max-w-md">
+                          <h4 className="text-sm font-bold text-red-400 font-mono tracking-wide uppercase">
+                            {classroomVideoError.includes("Retrying") ? "Auto-Recovery Attempting" : "Video Loading Fault Detected"}
+                          </h4>
+                          <p className="text-xs text-gray-300 leading-relaxed">{classroomVideoError}</p>
+                          <p className="text-[10px] text-gray-500 font-mono font-bold">FAULT CODE: ERROR_153_VIDEO_CONFIG_FAILED</p>
+                        </div>
+                        {!classroomVideoError.includes("Retrying") && (
+                          <div className="flex gap-2.5">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setClassroomVideoFallbackActive(true);
+                                setClassroomVideoError(null);
+                              }}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white font-mono text-[11px] font-bold py-2 px-4 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <Sparkles className="w-3.5 h-3.5 animate-pulse" />
+                              Use Valid Fallback Stream
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setClassroomVideoError(null);
+                                setClassroomVideoLoading(false);
+                              }}
+                              className="bg-[#21262d] hover:bg-[#30363d] text-gray-400 hover:text-white border border-[#30363d] font-mono text-[11px] py-2 px-4 rounded-lg transition-all cursor-pointer"
+                            >
+                              Bypass & Play Anyway
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    ) : classroomVideoLoading ? (
+                      <div className="absolute inset-0 bg-[#0d1117] flex flex-col items-center justify-center space-y-3 z-10">
+                        <div className="w-8 h-8 border-2 border-[#ff7b00] border-t-transparent rounded-full animate-spin"></div>
+                        <p className="text-[10px] font-mono tracking-wider text-gray-400 uppercase">
+                          {isRetrying ? `Re-instantiating Stream (Attempt ${classroomVideoRetryCount}/3)...` : "Verifying Source Integrity..."}
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                        {isEmbeddableVideoUrl(classroomVideoFallbackActive ? "https://www.w3schools.com/html/mov_bbb.mp4" : activeStepLesson.videoUrl) ? (
+                          <iframe
+                            key={classroomVideoFallbackActive ? "fallback" : `${activeStepLesson.videoUrl}-retry-${classroomVideoRetryCount}`}
+                            src={getEmbedUrl(classroomVideoFallbackActive ? "https://www.w3schools.com/html/mov_bbb.mp4" : activeStepLesson.videoUrl)}
+                            title={activeStepLesson.title}
+                            className="w-full h-full border-0 absolute inset-0"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowFullScreen
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          <video
+                            key={classroomVideoFallbackActive ? "fallback" : `${activeStepLesson.videoUrl}-retry-${classroomVideoRetryCount}`}
+                            src={classroomVideoFallbackActive ? "https://www.w3schools.com/html/mov_bbb.mp4" : activeStepLesson.videoUrl}
+                            controls
+                            className="w-full h-full object-cover absolute inset-0"
+                            onError={() => {
+                              handleVideoLoadError("Error 153: Video playback failed. The media source could not be resolved, is formatted incorrectly, or lacks valid cross-origin permissions.");
+                            }}
+                          />
+                        )}
+                      </>
+                    )}
+
+                    {classroomVideoFallbackActive && (
+                      <div className="absolute bottom-3 left-3 bg-emerald-950/80 backdrop-blur-sm px-2.5 py-1 rounded text-[9px] font-mono text-emerald-400 border border-emerald-500/30 select-none z-10 font-bold uppercase flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-ping" />
+                        <span>Running Fallback Stream</span>
+                        <button
+                          type="button"
+                          onClick={() => setClassroomVideoFallbackActive(false)}
+                          className="ml-1 text-red-400 hover:text-red-300 font-bold font-sans text-[10px]"
+                          title="Reset to Original"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Playback ID troubleshooting & Error 153 Recovery Trigger */}
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-[#161b22] border border-[#30363d] p-3 rounded-xl">
+                    <div className="space-y-1">
+                      <p className="text-[11px] font-semibold text-gray-200">
+                        Experiencing a YouTube restriction or Playback ID error?
+                      </p>
+                      <p className="text-[10px] text-gray-500">
+                        Some restricted streams require a proxy fallback. Trigger the 3-step auto-recovery loop to restore.
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        handleVideoLoadError("Error 153: Player load failed due to external playback restriction.");
+                      }}
+                      className="bg-red-950/50 hover:bg-red-900/60 text-red-400 hover:text-red-300 border border-red-800/40 font-mono text-[11px] font-bold py-1.5 px-3 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
+                    >
+                      <AlertTriangle className="w-3.5 h-3.5" />
+                      Trigger Error 153 Recovery
+                    </button>
                   </div>
 
                   {user && user.role === "ADMIN" && (
@@ -2471,6 +2777,7 @@ export default function App() {
               onEnrollCourse={handleEnrollCourse}
               t={t}
               onUpdateUser={setUser}
+              onRefreshData={fetchAllData}
             />
           </div>
         )}
@@ -2872,6 +3179,138 @@ export default function App() {
         onConfirm={deleteModal.onConfirm}
       />
 
+      {/* PDF DETAILS MODAL: READ MORE AND DOWNLOAD */}
+      {selectedPdfDetails && (
+        <div className="fixed inset-0 min-h-screen bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 animate-fade-in" id="pdf-details-modal">
+          <div className="bg-[#161b22] border border-[#30363d] rounded-2xl w-full max-w-lg shadow-2xl relative overflow-hidden flex flex-col">
+            <div className="h-1 w-full bg-gradient-to-r from-[#ff7b00] to-orange-600"></div>
+            
+            <div className="p-6 space-y-5">
+              <div className="flex justify-between items-start">
+                <div>
+                  <span className="text-[10px] font-mono font-bold tracking-wider uppercase text-[#ff7b00] bg-[#ff7b00]/10 border border-[#ff7b00]/20 px-2.5 py-0.5 rounded">
+                    Reference Book Details
+                  </span>
+                  <h3 className="text-lg font-bold text-white mt-1.5 leading-snug">{selectedPdfDetails.title}</h3>
+                </div>
+                <button 
+                  onClick={() => setSelectedPdfDetails(null)}
+                  className="p-1 px-2.5 rounded bg-[#21262d] text-gray-400 hover:text-white hover:bg-red-500/10 hover:text-red-400 transition-all font-mono text-sm"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-4 text-xs text-gray-300">
+                <div className="grid grid-cols-2 gap-3 bg-[#0d1117] p-3 rounded-xl border border-[#30363d]/50 font-mono text-[11px]">
+                  <div>
+                    <span className="text-gray-500 uppercase block text-[9px] font-bold">Author Writer</span>
+                    <span className="text-white font-sans font-semibold">{selectedPdfDetails.author}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 uppercase block text-[9px] font-bold">Category Field</span>
+                    <span className="text-white">{selectedPdfDetails.category}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 uppercase block text-[9px] font-bold">Publication Date</span>
+                    <span className="text-white">{selectedPdfDetails.publishedDate || "2024-03-15"}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500 uppercase block text-[9px] font-bold">Pricing Tier</span>
+                    <span className="text-[#ff7b00] font-bold">{selectedPdfDetails.isPremium ? "Premium (UGX 15,000)" : "Standard Free"}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <span className="text-[10px] text-gray-400 uppercase font-bold tracking-wider block">Detailed Overview Summary:</span>
+                  <p className="bg-[#0d1117]/40 p-4 rounded-xl border border-[#30363d]/60 text-gray-300 leading-relaxed text-xs">
+                    {selectedPdfDetails.description || "Access instant, step-by-step downloadable guidelines and technical blueprints from PowerCode Academy. This professional reference book details standard programming concepts and structures compiled for students and technical professionals alike."}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedPdfDetails(null)}
+                  className="flex-1 bg-[#21262d] hover:bg-[#30363d] text-white border border-[#30363d] text-xs font-bold py-2.5 rounded-lg transition-colors font-mono"
+                >
+                  CLOSE WINDOW
+                </button>
+
+                {(() => {
+                  const userPurchase = pdfPurchases.find((p: any) => p.pdfId === selectedPdfDetails.id && p.userId === user?.id);
+                  const hasActiveAccess = user?.role === "ADMIN" || userPurchase?.status === "APPROVED";
+                  const bookLocked = selectedPdfDetails.isPremium && !hasActiveAccess;
+
+                  if (bookLocked) {
+                    if (!user) {
+                      return (
+                        <button
+                          onClick={() => {
+                            setSelectedPdfDetails(null);
+                            setShowLogin(true);
+                          }}
+                          className="flex-1 bg-[#ff7b00] hover:bg-[#e66f00] text-white text-xs font-bold py-2.5 rounded-lg flex items-center justify-center gap-1.5 transition-colors"
+                        >
+                          <Lock className="w-4 h-4" />
+                          <span>Login to Unlock Book</span>
+                        </button>
+                      );
+                    } else if (userPurchase?.status === "PENDING_APPROVAL") {
+                      return (
+                        <div className="flex-1 bg-amber-500/10 text-amber-400 border border-amber-500/20 text-xs font-bold py-2.5 rounded-lg flex items-center justify-center gap-1.5 font-mono">
+                          <span className="animate-pulse">●</span>
+                          <span>Pending Proof Verification</span>
+                        </div>
+                      );
+                    } else {
+                      return (
+                        <button
+                          onClick={() => {
+                            setPurchasePdfItem(selectedPdfDetails);
+                            setPaymentPhone(user?.phone || "");
+                            setSelectedPdfDetails(null);
+                          }}
+                          className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-2.5 rounded-lg flex items-center justify-center gap-1.5 transition-all shadow shadow-emerald-950/20"
+                        >
+                          <Unlock className="w-4 h-4" />
+                          <span>Buy PDF Book</span>
+                        </button>
+                      );
+                    }
+                  } else {
+                    return (
+                      <a
+                        href={isOfflineSimulated && !isPdfCached(selectedPdfDetails.id) ? undefined : selectedPdfDetails.fileUrl}
+                        target={isOfflineSimulated && !isPdfCached(selectedPdfDetails.id) ? undefined : "_blank"}
+                        rel="noopener noreferrer"
+                        onClick={(e) => {
+                          if (isOfflineSimulated && !isPdfCached(selectedPdfDetails.id)) {
+                            e.preventDefault();
+                            alert("🔌 Offline Intermittent Simulation: This manual has not been cached yet! Please connect online to download.");
+                            return;
+                          }
+                          handleCachePdf(selectedPdfDetails);
+                        }}
+                        className={`${
+                          isOfflineSimulated && !isPdfCached(selectedPdfDetails.id)
+                            ? "bg-slate-700 text-gray-500 border border-slate-600 cursor-not-allowed opacity-50"
+                            : "bg-[#ff7b00] hover:bg-[#e66f00] text-white"
+                        } flex-1 text-xs font-bold py-2.5 rounded-lg flex items-center justify-center gap-1.5 cursor-pointer transition-colors`}
+                      >
+                        <Download className="w-4 h-4" />
+                        <span>Download Book PDF</span>
+                      </a>
+                    );
+                  }
+                })()}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* PDF PAYMENT MODAL: MOBILE MONEY PAYMENT AND PROOF SUBMISSION */}
       {purchasePdfItem && user && (
         <div className="fixed inset-0 min-h-screen bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 animate-fade-in" id="momo-payment-modal">
@@ -2909,7 +3348,7 @@ export default function App() {
                   <p className="text-xs text-gray-500 truncate font-mono">By {purchasePdfItem.author}</p>
                   <div className="flex items-baseline gap-1 mt-1">
                     <span className="text-xs text-slate-400">Fixed Cost:</span>
-                    <span className="text-sm font-extrabold text-orange-400 font-mono">UGX 15,000</span>
+                    <span className="text-sm font-extrabold text-orange-400 font-mono">RWF 15,000 / $15</span>
                   </div>
                 </div>
               </div>
@@ -2928,7 +3367,7 @@ export default function App() {
                     }`}
                   >
                     <span className="text-xs font-black uppercase tracking-tight">MTN Mobile Money</span>
-                    <span className="text-[9px] font-mono opacity-80">UGX / GHS / RWF</span>
+                    <span className="text-[9px] font-mono opacity-80">RWF / UGX / GHS</span>
                   </button>
 
                   <button
@@ -2952,43 +3391,17 @@ export default function App() {
                   How to complete your pay:
                 </span>
                 
-                {paymentMethod === "MTN" ? (
-                  <div className="space-y-2.5 text-xs text-slate-300">
-                    <p>
-                      1. Dial the USSD prompt code <strong className="text-yellow-400 font-mono">*165*3#</strong> on your phone.
-                    </p>
-                    <p>
-                      2. Enter MERCHANT CODE: <strong className="text-yellow-400 font-mono">121852</strong> (PowerCode Academy).
-                    </p>
-                    <p>
-                      3. Input amount: <strong className="text-yellow-400 font-mono">15,000</strong> UGX, enter PIN, and confirm.
-                    </p>
-                    <div className="pt-2 flex justify-start">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText("*165*3#");
-                          alert("MTN Mobile Money USSD code (*165*3#) saved to your device clipboard!");
-                        }}
-                        className="text-[10px] bg-yellow-500/10 hover:bg-yellow-500/20 text-yellow-300 font-semibold px-2.5 py-1 rounded inline-flex items-center gap-1 font-mono transition-colors"
-                      >
-                        Copy USSD (*165*3#)
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="space-y-2.5 text-xs text-slate-300">
-                    <p>
-                      1. Use your Airtel Money menu or app dashboard.
-                    </p>
-                    <p>
-                      2. Transfer funds to Airtel Number: <strong className="text-red-400 font-mono">+256 755 234 112</strong>.
-                    </p>
-                    <p>
-                      3. Confirm name: <strong className="text-red-400">PowerCode Traore Arcene</strong> matches your screen details.
-                    </p>
-                  </div>
-                )}
+                <div className="space-y-2.5 text-xs text-slate-300">
+                  <p>
+                    1. Send payment of <strong className="text-orange-400 font-mono">RWF 15,000</strong> to Mobile Money phone number: <strong className="text-yellow-400 font-mono">+250796599461</strong>.
+                  </p>
+                  <p>
+                    2. Recipient Name: <strong className="text-yellow-400 font-mono">Arcene Irakoze</strong> (PowerCode Academy).
+                  </p>
+                  <p>
+                    3. Submit your phone number used for the payment below to verify your transaction proof.
+                  </p>
+                </div>
               </div>
 
               {/* Form details */}
@@ -3043,7 +3456,7 @@ export default function App() {
                     type="text"
                     value={paymentPhone}
                     onChange={(e) => setPaymentPhone(e.target.value)}
-                    placeholder="e.g. +256 772 100 200"
+                    placeholder="e.g. +250 796 599 461"
                     required
                     className="w-full bg-[#0d1117] border border-[#30363d] text-white py-2 px-3.5 rounded-xl text-xs outline-none focus:border-[#ff7b00] font-mono placeholder:text-gray-600"
                   />
@@ -3062,6 +3475,188 @@ export default function App() {
                     type="button"
                     onClick={() => {
                       setPurchasePdfItem(null);
+                      setPaymentPhone("");
+                    }}
+                    className="bg-[#21262d] hover:bg-[#30363d] text-gray-300 text-xs font-bold py-2 px-4 rounded-xl transition-colors font-mono"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitAccessLoading}
+                    className="bg-[#ff7b00] hover:bg-[#e66f00] text-white text-xs font-bold py-2 px-5 rounded-xl flex items-center gap-1.5 font-mono shadow-md shadow-orange-950/20 disabled:opacity-50 transition-colors"
+                  >
+                    {isSubmitAccessLoading ? "Submitting..." : "Submit Payment Proof"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* COURSE PAYMENT MODAL: MOBILE MONEY PAYMENT AND PROOF SUBMISSION */}
+      {purchaseCourseItem && user && (
+        <div className="fixed inset-0 min-h-screen bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 animate-fade-in" id="course-momo-payment-modal">
+          <div className="bg-[#161b22] border border-[#ff7b00]/30 rounded-2xl w-full max-w-lg shadow-2xl relative overflow-hidden flex flex-col">
+            
+            {/* Header border flash */}
+            <div className="h-1 w-full bg-gradient-to-r from-yellow-500 via-orange-500 to-red-500"></div>
+            
+            <div className="p-6 space-y-5">
+              <div className="flex justify-between items-start">
+                <div>
+                  <span className="text-[10px] font-mono font-bold tracking-wider uppercase text-[#ff7b00] bg-[#ff7b00]/10 border border-[#ff7b00]/20 px-2.5 py-0.5 rounded">
+                    Mobile Money Payment Portal
+                  </span>
+                  <h3 className="text-lg font-bold text-white mt-1.5 leading-snug">Unlock Premium Course</h3>
+                </div>
+                <button 
+                  onClick={() => {
+                    setPurchaseCourseItem(null);
+                    setPaymentPhone("");
+                  }}
+                  className="p-1 px-2.5 rounded bg-[#21262d] text-gray-400 hover:text-white hover:bg-red-500/10 hover:text-red-400 transition-all font-mono text-sm"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Course Overview summary */}
+              <div className="bg-[#21262d] border border-[#30363d] rounded-xl p-4 flex gap-3.5 items-center">
+                <div className="p-3 bg-orange-500/10 text-[#ff7b00] rounded-lg">
+                  <BookOpen className="w-6 h-6" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h4 className="text-sm font-bold text-white truncate">{purchaseCourseItem.title}</h4>
+                  <p className="text-xs text-gray-500 truncate font-mono">Publisher: PowerCode Academy</p>
+                  <div className="flex items-baseline gap-1 mt-1">
+                    <span className="text-xs text-slate-400">Fixed Cost:</span>
+                    <span className="text-sm font-extrabold text-orange-400 font-mono">RWF 45,000 / ${purchaseCourseItem.price || 49}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Payment selector */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-400 block uppercase tracking-wider font-mono">Select MoMo Network Provider</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod("MTN")}
+                    className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all ${
+                      paymentMethod === "MTN" 
+                        ? "border-yellow-400 bg-yellow-500/10 text-yellow-300" 
+                        : "border-[#30363d] bg-[#0d1117] text-gray-400 hover:border-gray-600"
+                    }`}
+                  >
+                    <span className="text-xs font-black uppercase tracking-tight">MTN Mobile Money</span>
+                    <span className="text-[9px] font-mono opacity-80">RWF / UGX / GHS</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod("Airtel")}
+                    className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all ${
+                      paymentMethod === "Airtel" 
+                        ? "border-red-400 bg-red-500/10 text-red-300" 
+                        : "border-[#30363d] bg-[#0d1117] text-gray-400 hover:border-gray-600"
+                    }`}
+                  >
+                    <span className="text-xs font-black uppercase tracking-tight">Airtel Money</span>
+                    <span className="text-[9px] font-mono opacity-80">East Africa Region</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Steps details depends on payment selection */}
+              <div className="bg-[#0d1117] border border-[#21262d] rounded-xl p-4.5 space-y-3">
+                <span className="text-[10px] font-bold text-slate-500 font-mono block uppercase border-b border-[#21262d] pb-1.5">
+                  How to complete your pay:
+                </span>
+                
+                <div className="space-y-2.5 text-xs text-slate-300">
+                  <p>
+                    1. Send payment of <strong className="text-orange-400 font-mono">RWF 45,000</strong> to Mobile Money phone number: <strong className="text-yellow-400 font-mono">+250796599461</strong>.
+                  </p>
+                  <p>
+                    2. Recipient Name: <strong className="text-yellow-400 font-mono">Arcene Irakoze</strong> (PowerCode Academy).
+                  </p>
+                  <p>
+                    3. Submit your phone number used for the payment below to verify your transaction proof.
+                  </p>
+                </div>
+              </div>
+
+              {/* Form details */}
+              <form 
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!paymentPhone.trim()) {
+                    alert("Please input your payment phone number first.");
+                    return;
+                  }
+                  
+                  setIsSubmitAccessLoading(true);
+                  try {
+                    const response = await fetch("/api/payments/request", {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${user.email}`
+                      },
+                      body: JSON.stringify({
+                        contentType: "COURSE",
+                        contentId: purchaseCourseItem.id,
+                        contentTitle: purchaseCourseItem.title,
+                        amountPaid: purchaseCourseItem.price || 49,
+                        paymentMethod,
+                        phone: paymentPhone,
+                        proofUrl: `https://dummyimage.com/600x800/ff7b00/ffffff&text=RECEIPT+${paymentMethod}+Powercode+${Math.floor(100000+Math.random()*900000)}`
+                      })
+                    });
+                    const resJson = await response.json();
+                    if (resJson.success) {
+                      alert("💸 Your course payment transaction has been transmitted to admins successfully!\n\nOnce our finance team verifies the transaction, this premium course will instantly unlock for you.");
+                      setPurchaseCourseItem(null);
+                      setPaymentPhone("");
+                      fetchAllData();
+                    } else {
+                      alert(resJson.error || "Something failed transmitting proof details.");
+                    }
+                  } catch (err: any) {
+                    alert(`Network error transmitting details: ${err?.message}`);
+                  } finally {
+                    setIsSubmitAccessLoading(false);
+                  }
+                }}
+                className="space-y-4"
+              >
+                <div>
+                  <label className="text-xs font-bold text-gray-400 block uppercase tracking-wider font-mono mb-1">Your Registered MoMo Phone</label>
+                  <input
+                    type="text"
+                    value={paymentPhone}
+                    onChange={(e) => setPaymentPhone(e.target.value)}
+                    placeholder="e.g. +250 796 599 461"
+                    required
+                    className="w-full bg-[#0d1117] border border-[#30363d] text-white py-2 px-3.5 rounded-xl text-xs outline-none focus:border-[#ff7b00] font-mono placeholder:text-gray-600"
+                  />
+                  <p className="text-[10px] text-gray-500 font-mono mt-1">Our finance department maps transactions against the sender phone log history.</p>
+                </div>
+
+                <div className="bg-[#21262d]/40 rounded-xl p-3 flex items-start gap-2 border border-[#30363d]/50">
+                  <Check className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
+                  <span className="text-[11px] text-slate-400 leading-normal">
+                    By submitting, you agree that we will automatically generate a verified transaction receipt and queue it for review.
+                  </span>
+                </div>
+
+                <div className="flex gap-3 justify-end pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setPurchaseCourseItem(null);
                       setPaymentPhone("");
                     }}
                     className="bg-[#21262d] hover:bg-[#30363d] text-gray-300 text-xs font-bold py-2 px-4 rounded-xl transition-colors font-mono"

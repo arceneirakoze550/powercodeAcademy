@@ -74,6 +74,8 @@ export interface PdfBook {
   fileUrl: string;
   previewUrl: string;
   isPremium: boolean;
+  description?: string;
+  publishedDate?: string;
   isBookmarked?: boolean;
   isPublished?: boolean;
   isArchived?: boolean;

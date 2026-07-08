@@ -16,11 +16,12 @@ interface DashboardProps {
   t: (key: string) => string;
   onUpdateUser?: (updated: User) => void;
   triggerToast?: (message: string, type?: string) => void;
+  onRefreshData?: () => void;
 }
 
 type AdminTab = "stats" | "courses" | "tutorials" | "pdfs" | "challenges" | "quizzes" | "certificates" | "announcements" | "paths" | "settings" | "purchases" | "trash" | "logs" | "sounds" | "transactions" | "media" | "users";
 
-export default function Dashboard({ user, onViewCertificate, coursesList, onEnrollCourse, t, onUpdateUser, triggerToast }: DashboardProps) {
+export default function Dashboard({ user, onViewCertificate, coursesList, onEnrollCourse, t, onUpdateUser, triggerToast, onRefreshData }: DashboardProps) {
   const isAdmin = user.role === "ADMIN";
 
   // LOCAL TOAST FALLBACK SYSTEM
@@ -146,6 +147,8 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
   const [pdfCategory, setPdfCategory] = useState<string>("Coding");
   const [pdfFileUrl, setPdfFileUrl] = useState<string>("");
   const [pdfPremium, setPdfPremium] = useState<boolean>(false);
+  const [pdfDescription, setPdfDescription] = useState<string>("");
+  const [pdfPublishedDate, setPdfPublishedDate] = useState<string>("");
 
   // 4. CODING CHALLENGE CREATOR
   const [challengeTitle, setChallengeTitle] = useState<string>("");
@@ -368,6 +371,9 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
       console.error("Dashboard database synchronization failed", e);
     } finally {
       setLoading(false);
+      if (onRefreshData) {
+        onRefreshData();
+      }
     }
   };
 
@@ -483,22 +489,22 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
     }
   };
 
-  // LOCAL SECURE COMPUTER FILE UPLOAD SIMULATOR (WITH ACTUAL BASE64 DATA URL READS FOR REAL IMAGES)
-  const handleFileSystemUploadSim = async (e: React.ChangeEvent<HTMLInputElement>, fileType: "image" | "video", setterCallback: (url: string) => void) => {
+  // LOCAL SECURE COMPUTER FILE UPLOAD SIMULATOR (WITH ACTUAL BASE64 DATA URL READS FOR REAL IMAGES & PDFS)
+  const handleFileSystemUploadSim = async (e: React.ChangeEvent<HTMLInputElement>, fileType: "image" | "video" | "pdf", setterCallback: (url: string) => void) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
     setUploadProgress(`Processing ${file.name}...`);
-    window.showPowerCodeLoader?.("Uploading Content...");
+    window.showPowerCodeLoader?.(fileType === "video" ? "Applying Watermark & Uploading..." : "Uploading Content...");
 
     try {
-      if (fileType === "image") {
+      if (fileType === "image" || fileType === "pdf") {
         const reader = new FileReader();
         reader.onload = async (event) => {
           const base64Url = event.target?.result as string;
           if (base64Url) {
             setterCallback(base64Url);
-            setUploadProgress(`✅ Loaded high-fidelity digital asset: ${file.name}`);
+            setUploadProgress(`✅ Loaded high-fidelity digital ${fileType} asset: ${file.name}`);
             
             // Log file upload metadata in background for backend consistency
             fetch("/api/upload", {
@@ -506,7 +512,7 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
                 fileName: file.name,
-                fileType: "image",
+                fileType: fileType,
                 fileData: base64Url
               })
             }).catch(err => console.warn("Background upload sync bypassed", err))
@@ -520,24 +526,26 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
           }
         };
         reader.onerror = () => {
-          setUploadProgress("❌ Failed to parse local image asset.");
+          setUploadProgress(`❌ Failed to parse local ${fileType} asset.`);
           window.hidePowerCodeLoader?.();
         };
         reader.readAsDataURL(file);
       } else {
+        // Video upload with automatic watermarking simulation
         const response = await fetch("/api/upload", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             fileName: file.name,
-            fileType: fileType
+            fileType: "video",
+            watermark: "@PowerCode Academy"
           })
         });
 
         const data = await response.json();
         if (data.success) {
           setterCallback(data.url);
-          setUploadProgress(`✅ Successfully linked direct Cloudinary secure URL!`);
+          setUploadProgress(`✅ Successfully linked watermarked PowerCode video asset!`);
         } else {
           setUploadProgress(`❌ File upload pipeline error.`);
         }
@@ -753,7 +761,9 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
           author: pdfAuthor,
           category: pdfCategory,
           fileUrl: pdfFileUrl,
-          isPremium: pdfPremium
+          isPremium: pdfPremium,
+          description: pdfDescription,
+          publishedDate: pdfPublishedDate
         })
       });
       const data = await res.json();
@@ -775,6 +785,8 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
     setPdfCategory(p.category);
     setPdfFileUrl(p.fileUrl);
     setPdfPremium(!!p.isPremium);
+    setPdfDescription(p.description || "");
+    setPdfPublishedDate(p.publishedDate || "");
     setFeedback("🛠️ PDF Book selected for edit. Update the fields above.");
   };
 
@@ -784,6 +796,8 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
     setPdfAuthor("");
     setPdfFileUrl("");
     setPdfPremium(false);
+    setPdfDescription("");
+    setPdfPublishedDate("");
   };
 
   const handleDeletePdf = (id: number) => {
@@ -1993,13 +2007,44 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
                 </div>
 
                 <div className="space-y-1">
-                  <label className="text-[10px] text-gray-400 uppercase font-bold block font-mono">Upload Book or File link:</label>
+                  <label className="text-[10px] text-gray-400 uppercase font-bold">Published Date:</label>
+                  <input
+                    type="date"
+                    value={pdfPublishedDate}
+                    onChange={(e) => setPdfPublishedDate(e.target.value)}
+                    className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg p-2 text-xs text-white outline-none font-mono"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] text-gray-400 uppercase font-bold">Book Description:</label>
+                  <textarea
+                    rows={2}
+                    value={pdfDescription}
+                    onChange={(e) => setPdfDescription(e.target.value)}
+                    placeholder="Short description summarizing what this reference manual is about..."
+                    className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg p-2 text-xs text-white outline-none"
+                  />
+                </div>
+
+                <div className="space-y-1 bg-[#0d1117]/50 p-3.5 rounded-xl border border-[#30363d]/80">
+                  <label className="text-[10px] text-[#ff7b00] uppercase font-bold flex items-center gap-1.5 font-mono mb-1.5">
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Upload Book from PC:</span>
+                  </label>
+                  <input
+                    type="file"
+                    accept=".pdf,application/pdf"
+                    onChange={(e) => handleFileSystemUploadSim(e, "pdf", setPdfFileUrl)}
+                    className="text-[10px] text-gray-500 block w-full file:bg-[#21262d] file:border-0 file:text-xs file:text-white file:px-3 file:py-1 file:rounded-md file:hover:bg-[#30363d] cursor-pointer mb-2"
+                  />
+                  <label className="text-[9px] text-gray-400 block font-mono">Or specify reference URL:</label>
                   <input
                     type="text"
                     value={pdfFileUrl}
                     onChange={(e) => setPdfFileUrl(e.target.value)}
-                    placeholder="Pdf location url"
-                    className="w-full bg-[#0d1117] border border-[#30363d] rounded-lg p-2 text-xs text-white outline-none"
+                    placeholder="e.g. /static/pdfs/mybook.pdf"
+                    className="w-full bg-[#161b22] border border-[#30363d] rounded-lg p-2 text-xs text-white outline-none"
                   />
                 </div>
 

