@@ -304,7 +304,7 @@ export default function ContentMediaManager({ user, setFeedback, triggerToast }:
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {filteredItems.map((item) => {
-          const isHardcodedPlaceholder = !item.videoUrl || item.videoUrl.includes("mov_bbb.mp4") || item.videoUrl === "https://www.w3schools.com/html/mov_bbb.mp4";
+          const isHardcodedPlaceholder = !item.videoUrl || item.videoUrl.includes("mov_bbb.mp4") || item.videoUrl.includes("BigBuckBunny.mp4") || item.videoUrl === "https://www.w3schools.com/html/mov_bbb.mp4";
           const isEmpty = !item.videoUrl;
 
           return (

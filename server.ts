@@ -499,7 +499,7 @@ async function loadDBFromPostgres(): Promise<DbState> {
         id: row.id,
         title: row.title || "",
         content: row.content || "",
-        videoUrl: row.video_url || "https://www.w3schools.com/html/mov_bbb.mp4",
+        videoUrl: row.video_url || "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
         durationMinutes: row.duration_minutes || 10,
         isPreviewAllowed: !!row.is_preview_allowed,
         quizId: row.quiz_id || undefined,
@@ -539,7 +539,7 @@ async function loadDBFromPostgres(): Promise<DbState> {
       id: row.id,
       title: row.title || "",
       category: row.category || "",
-      videoUrl: row.video_url || "https://www.w3schools.com/html/mov_bbb.mp4",
+      videoUrl: row.video_url || "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
       status: row.status || "Published",
       deleted_at: row.deleted_at || null,
       deleted_by: row.deleted_by || null,
@@ -1412,15 +1412,15 @@ const defaultInitialState: DbState = {
           id: 101,
           title: "1. Variables & Primitive Syntaxes",
           lessons: [
-            { id: 1001, title: "Welcome to JavaScript variables", content: "JavaScript has three core ways to declare variables: `let`, `const`, and `var`. Understanding Block vs Function scope is crucial. Write your first variables in the terminal and output using console.log.", videoUrl: "https://www.w3schools.com/html/mov_bbb.mp4", durationMinutes: 10, isPreviewAllowed: true },
-            { id: 1002, title: "Data Types & Lexical Scoping", content: "Primitives include string, number, boolean, null, undefined, and symbol. Non-primitives are object, function, array. Learn how closures capture references.", videoUrl: "https://www.w3schools.com/html/mov_bbb.mp4", durationMinutes: 15, isPreviewAllowed: false }
+            { id: 1001, title: "Welcome to JavaScript variables", content: "JavaScript has three core ways to declare variables: `let`, `const`, and `var`. Understanding Block vs Function scope is crucial. Write your first variables in the terminal and output using console.log.", videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4", durationMinutes: 10, isPreviewAllowed: true },
+            { id: 1002, title: "Data Types & Lexical Scoping", content: "Primitives include string, number, boolean, null, undefined, and symbol. Non-primitives are object, function, array. Learn how closures capture references.", videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4", durationMinutes: 15, isPreviewAllowed: false }
           ]
         },
         {
           id: 102,
           title: "2. Control flows, condition loops",
           lessons: [
-            { id: 1003, title: "Loops: For, While and For...Of", content: "Master array manipulation loops, using break, continue, and index operations.", videoUrl: "https://www.w3schools.com/html/mov_bbb.mp4", durationMinutes: 12, isPreviewAllowed: false }
+            { id: 1003, title: "Loops: For, While and For...Of", content: "Master array manipulation loops, using break, continue, and index operations.", videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4", durationMinutes: 12, isPreviewAllowed: false }
           ]
         }
       ]
@@ -1437,7 +1437,7 @@ const defaultInitialState: DbState = {
           id: 201,
           title: "1. Data Lists & Dictionaries",
           lessons: [
-            { id: 2001, title: "Arrays & List comprehensions", content: "Explore computational Big-O metrics and fast indexing list transformations.", videoUrl: "https://www.w3schools.com/html/mov_bbb.mp4", durationMinutes: 18, isPreviewAllowed: true }
+            { id: 2001, title: "Arrays & List comprehensions", content: "Explore computational Big-O metrics and fast indexing list transformations.", videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4", durationMinutes: 18, isPreviewAllowed: true }
           ]
         }
       ]
@@ -1454,7 +1454,7 @@ const defaultInitialState: DbState = {
           id: 301,
           title: "1. Modeling Complex SQL Schemas",
           lessons: [
-            { id: 3001, title: "Writing migrations the expert way", content: "Define correct column typings, indexes, check constraints, foreign keys and triggers for databases.", videoUrl: "https://www.w3schools.com/html/mov_bbb.mp4", durationMinutes: 22, isPreviewAllowed: false }
+            { id: 3001, title: "Writing migrations the expert way", content: "Define correct column typings, indexes, check constraints, foreign keys and triggers for databases.", videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4", durationMinutes: 22, isPreviewAllowed: false }
           ]
         }
       ]
@@ -2143,7 +2143,7 @@ app.post("/api/courses", (req, res) => {
               id: l.id || (10000 + lIdx + mIdx * 100 + newCourseId * 1000),
               title: l.title || `Lesson ${lIdx + 1}`,
               content: l.content || "",
-              videoUrl: l.videoUrl || "https://www.w3schools.com/html/mov_bbb.mp4",
+              videoUrl: l.videoUrl || "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
               durationMinutes: Number(l.durationMinutes) || 10,
               isPreviewAllowed: !!l.isPreviewAllowed,
               quizId: l.quizId ? Number(l.quizId) : undefined
@@ -3042,7 +3042,7 @@ app.put("/api/courses/:id", (req, res) => {
               id: l.id || (10000 + lIdx + mIdx * 100 + courseId * 1000),
               title: l.title || `Lesson ${lIdx + 1}`,
               content: l.content || "",
-              videoUrl: l.videoUrl || "https://www.w3schools.com/html/mov_bbb.mp4",
+              videoUrl: l.videoUrl || "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
               durationMinutes: Number(l.durationMinutes) || 10,
               isPreviewAllowed: !!l.isPreviewAllowed,
               quizId: l.quizId ? Number(l.quizId) : undefined
@@ -5044,7 +5044,7 @@ app.post("/api/admin/tables/:table", (req, res) => {
       id: nextId, 
       title: body.title, 
       content: body.content || "", 
-      videoUrl: body.videoUrl || "https://www.w3schools.com/html/mov_bbb.mp4", 
+      videoUrl: body.videoUrl || "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4", 
       durationMinutes: Number(body.durationMinutes) || 12,
       isPreviewAllowed: !!body.isPreviewAllowed,
       quizId: body.quizId ? Number(body.quizId) : undefined

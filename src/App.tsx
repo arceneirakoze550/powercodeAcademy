@@ -2352,10 +2352,10 @@ export default function App() {
                       </div>
                     ) : (
                       <>
-                        {isEmbeddableVideoUrl(classroomVideoFallbackActive ? "https://www.w3schools.com/html/mov_bbb.mp4" : activeStepLesson.videoUrl) ? (
+                        {isEmbeddableVideoUrl(classroomVideoFallbackActive ? "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4" : activeStepLesson.videoUrl) ? (
                           <iframe
                             key={classroomVideoFallbackActive ? "fallback" : `${activeStepLesson.videoUrl}-retry-${classroomVideoRetryCount}`}
-                            src={getEmbedUrl(classroomVideoFallbackActive ? "https://www.w3schools.com/html/mov_bbb.mp4" : activeStepLesson.videoUrl)}
+                            src={getEmbedUrl(classroomVideoFallbackActive ? "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4" : activeStepLesson.videoUrl)}
                             title={activeStepLesson.title}
                             className="w-full h-full border-0 absolute inset-0"
                             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -2365,7 +2365,7 @@ export default function App() {
                         ) : (
                           <video
                             key={classroomVideoFallbackActive ? "fallback" : `${activeStepLesson.videoUrl}-retry-${classroomVideoRetryCount}`}
-                            src={classroomVideoFallbackActive ? "https://www.w3schools.com/html/mov_bbb.mp4" : activeStepLesson.videoUrl}
+                            src={classroomVideoFallbackActive ? "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4" : activeStepLesson.videoUrl}
                             controls
                             className="w-full h-full object-cover absolute inset-0"
                             onError={() => {
@@ -2393,25 +2393,70 @@ export default function App() {
                   </div>
 
                   {/* Playback ID troubleshooting & Error 153 Recovery Trigger */}
-                  <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-[#161b22] border border-[#30363d] p-3 rounded-xl">
-                    <div className="space-y-1">
-                      <p className="text-[11px] font-semibold text-gray-200">
-                        Experiencing a YouTube restriction or Playback ID error?
-                      </p>
-                      <p className="text-[10px] text-gray-500">
-                        Some restricted streams require a proxy fallback. Trigger the 3-step auto-recovery loop to restore.
-                      </p>
+                  <div className="bg-[#161b22] border border-[#30363d] p-4 rounded-xl space-y-4">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                      <div className="space-y-1">
+                        <p className="text-xs font-bold text-gray-200 flex items-center gap-1.5">
+                          <span className="inline-block w-2 h-2 rounded-full bg-orange-500"></span>
+                          Experiencing an iframe restriction or Playback ID error?
+                        </p>
+                        <p className="text-[11px] text-gray-400 leading-normal max-w-xl">
+                          Security sandboxing in development environments can sometimes block embedded YouTube players. Use the options below to watch directly, load the backup stream, or run the auto-recovery cycle.
+                        </p>
+                      </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        handleVideoLoadError("Error 153: Player load failed due to external playback restriction.");
-                      }}
-                      className="bg-red-950/50 hover:bg-red-900/60 text-red-400 hover:text-red-300 border border-red-800/40 font-mono text-[11px] font-bold py-1.5 px-3 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer whitespace-nowrap"
-                    >
-                      <AlertTriangle className="w-3.5 h-3.5" />
-                      Trigger Error 153 Recovery
-                    </button>
+
+                    <div className="flex flex-wrap gap-2.5 pt-1 border-t border-[#21262d]">
+                      {activeStepLesson.videoUrl && (
+                        <a
+                          href={activeStepLesson.videoUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="bg-[#ff7b00]/10 hover:bg-[#ff7b00]/20 text-[#ff7b00] hover:text-[#ff9533] border border-[#ff7b00]/30 font-semibold text-xs py-2 px-3.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer"
+                        >
+                          <ExternalLink className="w-3.5 h-3.5" />
+                          Open Video in New Tab ↗
+                        </a>
+                      )}
+                      
+                      {!classroomVideoFallbackActive && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setClassroomVideoFallbackActive(true);
+                            setClassroomVideoError(null);
+                          }}
+                          className="bg-emerald-950/40 hover:bg-emerald-900/50 text-emerald-400 hover:text-emerald-300 border border-emerald-800/40 font-semibold text-xs py-2 px-3.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer"
+                        >
+                          <Sparkles className="w-3.5 h-3.5" />
+                          Switch to Backup CDN Stream
+                        </button>
+                      )}
+
+                      {classroomVideoFallbackActive && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setClassroomVideoFallbackActive(false);
+                            setClassroomVideoError(null);
+                          }}
+                          className="bg-gray-800 hover:bg-gray-700 text-gray-300 border border-[#30363d] font-semibold text-xs py-2 px-3.5 rounded-lg flex items-center gap-1.5 transition-all cursor-pointer"
+                        >
+                          Reset to Original Stream
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handleVideoLoadError("Error 153: Player load failed due to external playback restriction.");
+                        }}
+                        className="bg-red-950/30 hover:bg-red-900/40 text-red-400 hover:text-red-300 border border-red-900/30 font-mono text-[10px] py-2 px-3.5 rounded-lg transition-all flex items-center gap-1.5 cursor-pointer ml-auto"
+                      >
+                        <AlertTriangle className="w-3.5 h-3.5" />
+                        Trigger Auto-Recovery
+                      </button>
+                    </div>
                   </div>
 
                   {user && user.role === "ADMIN" && (
