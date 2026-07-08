@@ -1816,9 +1816,9 @@ function parseUserFromAuth(req: express.Request): User | null {
   const parts = authHeader.split(" ");
   if (parts.length !== 2 || parts[0] !== "Bearer") return null;
 
-  const email = parts[1]; // Bearer <email> simulates simple token
+  const email = (parts[1] || "").trim().toLowerCase(); // Bearer <email> simulates simple token
   const db = getDB();
-  return db.users.find(u => u.email === email) || null;
+  return db.users.find(u => (u.email || "").trim().toLowerCase() === email) || null;
 }
 
 // AUTH API
@@ -4055,7 +4055,7 @@ async function sendPushNotifications(userId: number, title: string, message: str
   db.pushTokens = db.pushTokens || [];
   
   // Find tokens for this user or ALL devices if userId === 0 (broadcast)
-  const targetTokens = db.pushTokens.filter((t: any) => userId === 0 || t.userId === userId);
+  const targetTokens = db.pushTokens.filter((t: any) => userId === 0 || Number(t.userId) === Number(userId));
   if (targetTokens.length === 0) return;
 
   const expoTokens = targetTokens.filter((t: any) => t.type === "expo").map((t: any) => t.token);
@@ -4330,6 +4330,7 @@ app.put("/api/payments/:id/approve", (req, res) => {
         await pgPool.query(`
           INSERT INTO premium_access (id, user_id, content_type, content_id, granted_at, status)
           VALUES ($1, $2, $3, $4, $5, 'ACTIVE')
+          ON CONFLICT (id) DO NOTHING
         `, [nextAccId, request.userId, request.contentType, request.contentId, accessRow.grantedAt]);
         await pgPool.query("UPDATE transactions SET status = 'SUCCESS' WHERE request_id = $1", [reqId]);
       } catch (err) {
