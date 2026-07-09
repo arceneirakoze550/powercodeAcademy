@@ -1,0 +1,23 @@
+{
+  "name": "PowerCode Academy",
+  "short_name": "PowerCode",
+  "description": "Master coding with interactive courses, coding challenges, and advanced developer workspace.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0d1117",
+  "theme_color": "#ff7b00",
+  "icons": [
+    {
+      "src": "/powercodeacademy.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/powercodeacademy.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

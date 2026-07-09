@@ -489,7 +489,7 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
     }
   };
 
-  // LOCAL SECURE COMPUTER FILE UPLOAD SIMULATOR (WITH ACTUAL BASE64 DATA URL READS FOR REAL IMAGES & PDFS)
+  // LOCAL SECURE COMPUTER FILE UPLOAD SIMULATOR (WITH ACTUAL FormData MULTIPART FOR REAL ASSETS)
   const handleFileSystemUploadSim = async (e: React.ChangeEvent<HTMLInputElement>, fileType: "image" | "video" | "pdf", setterCallback: (url: string) => void) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -498,66 +498,30 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
     window.showPowerCodeLoader?.(fileType === "video" ? "Applying Watermark & Uploading..." : "Uploading Content...");
 
     try {
-      if (fileType === "image" || fileType === "pdf") {
-        const reader = new FileReader();
-        reader.onload = async (event) => {
-          const base64Url = event.target?.result as string;
-          if (base64Url) {
-            setterCallback(base64Url);
-            setUploadProgress(`✅ Loaded high-fidelity digital ${fileType} asset: ${file.name}`);
-            
-            // Log file upload metadata in background for backend consistency
-            fetch("/api/upload", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                fileName: file.name,
-                fileType: fileType,
-                fileData: base64Url
-              })
-            }).catch(err => console.warn("Background upload sync bypassed", err))
-              .finally(() => {
-                setTimeout(() => {
-                  window.hidePowerCodeLoader?.();
-                }, 400);
-              });
-          } else {
-            window.hidePowerCodeLoader?.();
-          }
-        };
-        reader.onerror = () => {
-          setUploadProgress(`❌ Failed to parse local ${fileType} asset.`);
-          window.hidePowerCodeLoader?.();
-        };
-        reader.readAsDataURL(file);
-      } else {
-        // Video upload with automatic watermarking simulation
-        const response = await fetch("/api/upload", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            fileName: file.name,
-            fileType: "video",
-            watermark: "@PowerCode Academy"
-          })
-        });
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("fileName", file.name);
+      formData.append("fileType", fileType);
 
-        const data = await response.json();
-        if (data.success) {
-          setterCallback(data.url);
-          setUploadProgress(`✅ Successfully linked watermarked PowerCode video asset!`);
-        } else {
-          setUploadProgress(`❌ File upload pipeline error.`);
-        }
-        setTimeout(() => {
-          window.hidePowerCodeLoader?.();
-        }, 400);
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        body: formData
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setterCallback(data.url);
+        setUploadProgress(`✅ Successfully uploaded and linked ${fileType} asset: ${file.name}`);
+      } else {
+        setUploadProgress(`❌ File upload pipeline error.`);
       }
-    } catch {
-      setUploadProgress(`❌ Network pipeline connection error.`);
-      window.hidePowerCodeLoader?.();
+    } catch (err: any) {
+      setUploadProgress(`❌ Upload failed: ${err.message}`);
     } finally {
-      setTimeout(() => setUploadProgress(""), 4500);
+      setTimeout(() => {
+        window.hidePowerCodeLoader?.();
+        setUploadProgress("");
+      }, 4000);
     }
   };
 

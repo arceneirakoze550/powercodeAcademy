@@ -116,75 +116,69 @@ export default function ContentMediaManager({ user, setFeedback, triggerToast }:
     setFeedback(`Uploading "${file.name}" to Cloudinary simulator sandbox...`);
     window.showPowerCodeLoader?.("Uploading Content...");
 
-    const reader = new FileReader();
-    reader.onload = async () => {
-      try {
-        const base64Data = reader.result as string;
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("fileName", file.name);
+      formData.append("fileType", file.type.startsWith("video/") ? "video" : "image");
+
+      // Trigger Cloudinary Storage Simulator
+      const uploadRes = await fetch("/api/upload", {
+        method: "POST",
+        body: formData
+      });
+
+      const uploadData = await uploadRes.json();
+      if (uploadData.success && uploadData.secure_url) {
+        const cloudUrl = uploadData.secure_url;
         
-        // Trigger Cloudinary Storage Simulator
-        const uploadRes = await fetch("/api/upload", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            fileName: file.name,
-            fileType: "video",
-            fileData: base64Data
-          })
-        });
-
-        const uploadData = await uploadRes.json();
-        if (uploadData.success && uploadData.secure_url) {
-          const cloudUrl = uploadData.secure_url;
-          
-          // Save back into DB via dynamic controllers
-          let saveRes;
-          if (item.tableType === "lessons") {
-            // Update lesson fields on the sub-nesting. 
-            // In server.ts PUT /api/admin/tables/lessons/:rowId updates the lesson perfectly
-            saveRes = await fetch(`/api/admin/tables/lessons/${item.id}`, {
-              method: "PUT",
-              headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${user.email}`
-              },
-              body: JSON.stringify({
-                title: item.title,
-                videoUrl: cloudUrl
-              })
-            });
-          } else {
-            saveRes = await fetch(`/api/admin/tables/tutorials/${item.id}`, {
-              method: "PUT",
-              headers: {
-                "Content-Type": "application/json",
-                "Authorization": `Bearer ${user.email}`
-              },
-              body: JSON.stringify({
-                videoUrl: cloudUrl
-              })
-            });
-          }
-
-          const saveData = await saveRes.json();
-          if (saveData.success) {
-            setFeedback(`✅ Media registered! "${file.name}" is now live on our simulated CDN.`);
-            loadMediaOptions();
-          } else {
-            alert(saveData.error || "Save mismatch error");
-          }
+        // Save back into DB via dynamic controllers
+        let saveRes;
+        if (item.tableType === "lessons") {
+          // Update lesson fields on the sub-nesting. 
+          // In server.ts PUT /api/admin/tables/lessons/:rowId updates the lesson perfectly
+          saveRes = await fetch(`/api/admin/tables/lessons/${item.id}`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${user.email}`
+            },
+            body: JSON.stringify({
+              title: item.title,
+              videoUrl: cloudUrl
+            })
+          });
         } else {
-          alert("Cloudinary connection failed inside internal simulator pipeline.");
+          saveRes = await fetch(`/api/admin/tables/tutorials/${item.id}`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${user.email}`
+            },
+            body: JSON.stringify({
+              videoUrl: cloudUrl
+            })
+          });
         }
-      } catch (err: any) {
-        alert("Upload parsing failure: " + err.message);
-      } finally {
-        setUploadingId(null);
-        setTimeout(() => {
-          window.hidePowerCodeLoader?.();
-        }, 400);
+
+        const saveData = await saveRes.json();
+        if (saveData.success) {
+          setFeedback(`✅ Media registered! "${file.name}" is now live on our simulated CDN.`);
+          loadMediaOptions();
+        } else {
+          alert(saveData.error || "Save mismatch error");
+        }
+      } else {
+        alert("Cloudinary connection failed inside internal simulator pipeline.");
       }
-    };
-    reader.readAsDataURL(file);
+    } catch (err: any) {
+      alert("Upload parsing failure: " + err.message);
+    } finally {
+      setUploadingId(null);
+      setTimeout(() => {
+        window.hidePowerCodeLoader?.();
+      }, 400);
+    }
   };
 
   const handleDeleteVideo = (item: MediaItem) => {

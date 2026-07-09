@@ -184,6 +184,46 @@ export default function App() {
   const [bellDropdownOpen, setBellDropdownOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [toastType, setToastType] = useState<string>("info");
+  const [isFirstLoadDone, setIsFirstLoadDone] = useState<boolean>(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isAppInstalled, setIsAppInstalled] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+
+    if (window.matchMedia("(display-mode: standalone)").matches) {
+      setIsAppInstalled(true);
+    }
+
+    const handleAppInstalled = () => {
+      setIsAppInstalled(true);
+      setDeferredPrompt(null);
+      triggerToast("🎉 PowerCode Academy installed successfully!", "success");
+    };
+
+    window.addEventListener("appinstalled", handleAppInstalled);
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", handleAppInstalled);
+    };
+  }, []);
+
+  const handleInstallApp = async () => {
+    if (!deferredPrompt) {
+      alert("To install PowerCode Academy on your device:\n\n• On Desktop (Chrome/Edge): Click the 'Install App' icon on the right side of the URL bar.\n• On iOS (Safari): Tap the 'Share' button, scroll down, and select 'Add to Home Screen'.\n• On Android (Chrome): Tap the three-dots menu (top-right) and select 'Install app' or 'Add to Home Screen'.");
+      return;
+    }
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    console.log(`PWA install response outcome: ${outcome}`);
+    setDeferredPrompt(null);
+  };
 
   const triggerToast = (message: string, type: string = "info") => {
     setToastMessage(message);
@@ -238,6 +278,24 @@ export default function App() {
     }
   ]);
   const [aiChatLoading, setAiChatLoading] = useState<boolean>(false);
+
+  // Global search, Pro modal, and Cart states
+  const [globalSearchQuery, setGlobalSearchQuery] = useState<string>("");
+  const [showSearchResults, setShowSearchResults] = useState<boolean>(false);
+  const [showProModal, setShowProModal] = useState<boolean>(false);
+  const [cart, setCart] = useState<any[]>(() => {
+    try {
+      const stored = localStorage.getItem("powercode_cart");
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [showCartDrawer, setShowCartDrawer] = useState<boolean>(false);
+
+  useEffect(() => {
+    localStorage.setItem("powercode_cart", JSON.stringify(cart));
+  }, [cart]);
 
   const handleSendAiChatMessage = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -704,13 +762,15 @@ export default function App() {
         headers["Authorization"] = `Bearer ${user.email}`;
       }
 
+      if (!isFirstLoadDone) {
+        setGlobalLoader({ isVisible: true, message: "Loading Academy Data..." });
+      }
+      
       // 1. Courses
-      setGlobalLoader({ isVisible: true, message: "Loading Courses..." });
       const coursesData = await safeFetchJson("/api/courses", { headers });
       if (coursesData.courses) setCourses(coursesData.courses);
 
       // 2. Tutorials
-      setGlobalLoader({ isVisible: true, message: "Loading Tutorials..." });
       const tutorialsData = await safeFetchJson("/api/tutorials", { headers });
       if (tutorialsData.tutorials) setTutorials(tutorialsData.tutorials);
 
@@ -745,6 +805,7 @@ export default function App() {
     } catch (err) {
       console.error("Critical: Could not retrieve REST endpoints.", err);
     } finally {
+      setIsFirstLoadDone(true);
       // Small simulated buffer to ensure smooth premium visual reveal
       setTimeout(() => {
         setGlobalLoader(prev => ({ ...prev, isVisible: false }));
@@ -788,6 +849,37 @@ export default function App() {
     } catch (err) {
       console.error("Enrollment failed inside backend sandbox router", err);
     }
+  };
+
+  const handleAddToCart = (item: any, type: "course" | "pdf") => {
+    if (!user) {
+      setShowLogin(true);
+      return;
+    }
+
+    // Check if already in cart
+    if (cart.some(c => c.id === item.id && c.type === type)) {
+      setToastMessage(`🛒 "${item.title}" is already in your shopping cart!`);
+      setTimeout(() => setToastMessage(""), 3000);
+      return;
+    }
+
+    const newItem = {
+      id: item.id,
+      type: type,
+      title: item.title,
+      price: item.price ?? 20,
+      thumbnailUrl: type === "course" ? item.thumbnailUrl : item.coverUrl || "https://images.unsplash.com/photo-1544947950-fa07a98d237f?auto=format&fit=crop&w=400&q=80",
+      item: item
+    };
+
+    setCart(prev => [...prev, newItem]);
+    setToastMessage(`🛒 Added "${item.title}" to your cart!`);
+    setTimeout(() => setToastMessage(""), 3000);
+  };
+
+  const handleRemoveFromCart = (id: number, type: "course" | "pdf") => {
+    setCart(prev => prev.filter(c => !(c.id === id && c.type === type)));
   };
 
   // Launch Study Classroom Reader Interface
@@ -971,6 +1063,67 @@ export default function App() {
     return matchesSearch && matchesCat;
   });
 
+  const getGlobalSearchResults = () => {
+    const q = globalSearchQuery.trim().toLowerCase();
+    if (!q) return [];
+
+    const results: Array<{ id: number; type: "course" | "tutorial" | "pdf" | "quiz"; title: string; subtitle: string; item: any }> = [];
+
+    // Filter Courses
+    courses.forEach(c => {
+      if (c.title.toLowerCase().includes(q) || c.description?.toLowerCase().includes(q)) {
+        results.push({
+          id: c.id,
+          type: "course",
+          title: c.title,
+          subtitle: `Course • ${c.price === 0 ? "Free" : `$${c.price}`} • ${c.isPremium ? "PRO" : "FREE"}`,
+          item: c
+        });
+      }
+    });
+
+    // Filter Tutorials
+    tutorials.forEach(t => {
+      if (t.title.toLowerCase().includes(q) || t.content?.toLowerCase().includes(q)) {
+        results.push({
+          id: t.id,
+          type: "tutorial",
+          title: t.title,
+          subtitle: `Tutorial • ${t.category}`,
+          item: t
+        });
+      }
+    });
+
+    // Filter PDF Books
+    pdfs.forEach(p => {
+      if (p.title.toLowerCase().includes(q) || p.author?.toLowerCase().includes(q)) {
+        results.push({
+          id: p.id,
+          type: "pdf",
+          title: p.title,
+          subtitle: `Book • By ${p.author} • ${p.isPremium ? "PRO" : "FREE"}`,
+          item: p
+        });
+      }
+    });
+
+    // Filter Quizzes
+    quizzes.forEach(qz => {
+      if (qz.title.toLowerCase().includes(q)) {
+        results.push({
+          id: qz.id,
+          type: "quiz",
+          title: qz.title,
+          subtitle: `Interactive Quiz • ${qz.questions?.length || 5} Questions`,
+          item: qz
+        });
+      }
+    });
+
+    return results;
+  };
+
   return (
     <div className="min-h-screen bg-[#0d1117] text-[#c9d1d9] font-sans selection:bg-[#ff7b00]/30 relative flex flex-col justify-between">
       
@@ -1009,13 +1162,74 @@ export default function App() {
               </span>
             </div>
 
-            {/* Quick header action indicators - clean workspace style */}
-            <div className="hidden lg:flex items-center gap-4 text-xs font-mono text-gray-400">
-              <span className="bg-[#ff7b00]/10 text-[#ff7b00] border border-[#ff7b00]/20 px-2 py-0.5 rounded font-bold uppercase text-[9px] tracking-wider">
-                Certified Partner Sandbox
-              </span>
-              <span className="text-gray-600">|</span>
-              <span>ALUMNI REGISTRY ACTIVE</span>
+            {/* 2. Centered Global Search Bar */}
+            <div className="flex-1 max-w-sm mx-4 hidden md:block relative" id="header-search-bar">
+              <div className="relative">
+                <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Quick search everything..."
+                  value={globalSearchQuery}
+                  onChange={(e) => {
+                    setGlobalSearchQuery(e.target.value);
+                    setShowSearchResults(true);
+                  }}
+                  onFocus={() => setShowSearchResults(true)}
+                  className="w-full bg-[#0d1117] border border-[#30363d] rounded-full pl-9 pr-8 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-[#ff7b00] transition-all font-mono"
+                />
+                {globalSearchQuery && (
+                  <button
+                    onClick={() => setGlobalSearchQuery("")}
+                    className="absolute right-3 top-1.5 text-gray-400 hover:text-white font-bold text-sm cursor-pointer border-0 bg-transparent"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+
+              {/* Floating search results panel */}
+              {showSearchResults && globalSearchQuery.trim() && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setShowSearchResults(false)} />
+                  <div className="absolute left-0 right-0 mt-2 bg-[#161b22] border border-[#30363d] rounded-xl shadow-2xl overflow-hidden z-50 max-h-96 overflow-y-auto divide-y divide-[#21262d]">
+                    {getGlobalSearchResults().length === 0 ? (
+                      <div className="p-4 text-center text-xs text-gray-500 font-mono">No matches found for "{globalSearchQuery}"</div>
+                    ) : (
+                      getGlobalSearchResults().map((res, idx) => (
+                        <div
+                          key={idx}
+                          onClick={() => {
+                            setShowSearchResults(false);
+                            setGlobalSearchQuery("");
+                            if (res.type === "course") {
+                              if (res.item.isEnrolled) {
+                                startStudyingCourse(res.item);
+                              } else {
+                                setActiveTab("courses");
+                                setTimeout(() => {
+                                  const el = document.getElementById("courses-tab-view");
+                                  if (el) el.scrollIntoView({ behavior: "smooth" });
+                                }, 100);
+                              }
+                            } else if (res.type === "tutorial") {
+                              setActiveTab("tutorials");
+                            } else if (res.type === "pdf") {
+                              setActiveTab("books");
+                              setSelectedPdfDetails(res.item);
+                            } else if (res.type === "quiz") {
+                              setActiveTab("courses");
+                            }
+                          }}
+                          className="p-3 hover:bg-[#1f242c] transition-colors cursor-pointer text-left space-y-1"
+                        >
+                          <div className="text-xs font-bold text-white line-clamp-1">{res.title}</div>
+                          <div className="text-[10px] font-mono font-semibold text-[#ff7b00] tracking-wider uppercase">{res.subtitle}</div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </>
+              )}
             </div>
 
             {/* Right Utilities (Lang Select, Session controls) */}
@@ -1042,6 +1256,44 @@ export default function App() {
                 {isOfflineSimulated ? <WifiOff className="w-3.5 h-3.5" /> : <Wifi className="w-3.5 h-3.5" />}
                 <span>{isOfflineSimulated ? "OFFLINE SIM" : "ONLINELIVE"}</span>
               </button>
+
+              {/* Upgrade to Pro & Cart Header Actions */}
+              {user && (
+                <>
+                  {user.isPro ? (
+                    <span className="bg-gradient-to-r from-amber-500 to-yellow-500 text-black font-extrabold text-[10px] tracking-wider px-3 py-1.5 rounded-full border border-amber-400 flex items-center gap-1.5 shadow-md shadow-amber-950/25">
+                      <Sparkles className="w-3.5 h-3.5 text-amber-900" />
+                      <span>PRO MEMBER</span>
+                    </span>
+                  ) : (
+                    <button
+                      onClick={() => setShowProModal(true)}
+                      className="bg-gradient-to-r from-amber-600 to-[#ff7b00] hover:from-amber-700 hover:to-[#e66f00] text-white font-extrabold text-[11px] tracking-wide px-3.5 py-1.5 rounded-full border-0 cursor-pointer flex items-center gap-1.5 shadow-md shadow-orange-950/20 active:scale-95 transition-all"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>UPGRADE TO PRO</span>
+                    </button>
+                  )}
+
+                  {/* Cart Action Button */}
+                  <button
+                    onClick={() => setShowCartDrawer(true)}
+                    className="bg-[#21262d] border border-[#30363d] hover:border-[#ff7b00] p-2 rounded-lg text-xs text-white transition-colors cursor-pointer flex items-center justify-center shrink-0 relative"
+                    title="Your Shopping Cart"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-slate-200">
+                      <circle cx="9" cy="21" r="1" />
+                      <circle cx="20" cy="21" r="1" />
+                      <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+                    </svg>
+                    {cart.length > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-[#ff7b00] text-white font-extrabold text-[8.5px] min-w-4 h-4 rounded-full flex items-center justify-center px-1 border border-[#0d1117] animate-pulse">
+                        {cart.length}
+                      </span>
+                    )}
+                  </button>
+                </>
+              )}
 
               {/* Theme Toggle Context */}
               <button
@@ -1215,6 +1467,18 @@ export default function App() {
                 </div>
               )}
 
+              {/* PWA Get App Quick Header Trigger */}
+              {!isAppInstalled && (
+                <button
+                  onClick={handleInstallApp}
+                  className="hidden md:flex bg-[#2ea043]/10 hover:bg-[#2ea043]/20 text-[#2ea043] border border-[#2ea043]/20 px-3 py-1.5 rounded-lg text-xs font-bold items-center gap-1.5 transition-colors cursor-pointer"
+                  title="Install PowerCode Academy on your device"
+                >
+                  <Download className="w-3.5 h-3.5 text-[#2ea043]" />
+                  <span>Get App</span>
+                </button>
+              )}
+
               {/* i18n Language Dropdown Button */}
               <div className="relative">
                 <button
@@ -1340,6 +1604,17 @@ export default function App() {
         {mobileMenuOpen && (
           <div className="lg:hidden bg-[#161b22] px-4 pt-2 pb-4 border-b border-[#30363d] space-y-2 text-xs font-semibold uppercase font-mono text-[#c9d1d9]">
             <button onClick={() => { setActiveTab("landing"); setMobileMenuOpen(false); }} className="w-full text-left py-2 hover:text-[#ff7b00]">LOBBY</button>
+            
+            {!isAppInstalled && (
+              <button
+                onClick={() => { setMobileMenuOpen(false); handleInstallApp(); }}
+                className="w-full text-left py-2 text-emerald-400 hover:text-emerald-300 flex items-center gap-2"
+              >
+                <Download className="w-3.5 h-3.5 text-emerald-400" />
+                <span>GET MOBILE APP</span>
+              </button>
+            )}
+
             <button onClick={() => { setActiveTab("courses"); setMobileMenuOpen(false); }} className="w-full text-left py-2 hover:text-[#ff7b00]">{t("courses")}</button>
             <button onClick={() => { setActiveTab("tutorials"); setMobileMenuOpen(false); }} className="w-full text-left py-2 hover:text-[#ff7b00]">{t("tutorials")}</button>
             <button onClick={() => { setActiveTab("pdfs"); setMobileMenuOpen(false); }} className="w-full text-left py-2 hover:text-[#ff7b00]">{t("pdfLibrary")}</button>
@@ -1641,6 +1916,28 @@ export default function App() {
                   </button>
                 )}
               </div>
+
+              {/* PWA WEB APPLICATION DOWNLOAD INSTALL TRIGGERS */}
+              {!isAppInstalled && (
+                <div className="flex flex-wrap gap-3 justify-center pt-4" id="lobby-pwa-triggers">
+                  <button
+                    onClick={handleInstallApp}
+                    className="hidden md:flex bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold text-xs py-2 px-5 rounded-lg transition-all items-center gap-2 cursor-pointer shadow-md shadow-emerald-950/20 active:scale-95"
+                    title="Install PowerCode Academy as a desktop application like YouTube or Spotify"
+                  >
+                    <Download className="w-3.5 h-3.5 text-white" />
+                    <span>Get App (Desktop)</span>
+                  </button>
+                  <button
+                    onClick={handleInstallApp}
+                    className="flex md:hidden bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-extrabold text-xs py-2 px-5 rounded-lg transition-all items-center gap-2 cursor-pointer shadow-md shadow-blue-950/20 active:scale-95"
+                    title="Add PowerCode Academy to your smartphone or tablet home screen"
+                  >
+                    <Download className="w-3.5 h-3.5 text-white" />
+                    <span>Get Mobile App</span>
+                  </button>
+                </div>
+              )}
             </section>
 
             {/* THREE-CARD BENTO FEATURE PLATFORMS */}
@@ -1720,21 +2017,36 @@ export default function App() {
                           >
                             Enter class
                           </button>
-                        ) : c.isPremium && !c.hasPremiumAccess ? (
-                          <button
-                            onClick={() => handleEnrollCourse(c.id)}
-                            className="bg-gradient-to-r from-amber-600 to-[#ff7b00] hover:from-amber-700 hover:to-[#e66f00] text-white text-xs font-bold py-1.5 px-4.5 rounded-lg transition-colors cursor-pointer border-0 flex items-center gap-1.5 shadow-md shadow-orange-950/20"
-                          >
-                            <Lock className="w-3 h-3" />
-                            <span>Unlock Class</span>
-                          </button>
                         ) : (
-                          <button
-                            onClick={() => handleEnrollCourse(c.id)}
-                            className="bg-[#ff7b00] hover:bg-[#e66f00] text-white text-xs font-bold py-1.5 px-4.5 rounded-lg transition-colors cursor-pointer border-0"
-                          >
-                            {t("enrollNow")}
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleAddToCart(c, "course")}
+                              className="bg-[#21262d] hover:border-[#ff7b00] border border-[#30363d] text-white p-2 rounded-lg transition-colors cursor-pointer flex items-center justify-center shrink-0"
+                              title="Add to Cart"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-[#ff7b00]">
+                                <circle cx="9" cy="21" r="1" />
+                                <circle cx="20" cy="21" r="1" />
+                                <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+                              </svg>
+                            </button>
+                            {c.isPremium && !c.hasPremiumAccess ? (
+                              <button
+                                onClick={() => handleEnrollCourse(c.id)}
+                                className="bg-gradient-to-r from-amber-600 to-[#ff7b00] hover:from-amber-700 hover:to-[#e66f00] text-white text-xs font-bold py-1.5 px-4 rounded-lg transition-colors cursor-pointer border-0 flex items-center gap-1 shadow-md shadow-orange-950/20"
+                              >
+                                <Lock className="w-3 h-3" />
+                                <span>Unlock</span>
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleEnrollCourse(c.id)}
+                                className="bg-[#ff7b00] hover:bg-[#e66f00] text-white text-xs font-bold py-1.5 px-4 rounded-lg transition-colors cursor-pointer border-0"
+                              >
+                                {t("enrollNow")}
+                              </button>
+                            )}
+                          </div>
                         )}
                       </div>
                     </div>
@@ -1824,7 +2136,7 @@ export default function App() {
                         <button
                           onClick={() => pdfExportService.downloadCourse(c)}
                           title="Download Syllabus PDF"
-                          className="bg-zinc-850 hover:bg-zinc-800 text-gray-300 border border-zinc-700 hover:border-[#ff7b00]/70 p-2 rounded-lg transition-colors cursor-pointer flex items-center justify-center"
+                          className="bg-[#21262d] hover:bg-zinc-800 text-gray-300 border border-[#30363d] hover:border-[#ff7b00]/70 p-2 rounded-lg transition-colors cursor-pointer flex items-center justify-center shrink-0"
                           type="button"
                         >
                           <Download className="w-3.5 h-3.5 text-[#ff7b00]" />
@@ -1833,25 +2145,40 @@ export default function App() {
                         {c.isEnrolled ? (
                           <button
                             onClick={() => startStudyingCourse(c)}
-                            className="bg-[#2ea043] hover:bg-[#2c974b] text-white text-xs font-bold py-1.5 px-4.5 rounded-lg transition-colors cursor-pointer"
+                            className="bg-[#2ea043] hover:bg-[#2c974b] text-white text-xs font-bold py-1.5 px-4 rounded-lg transition-colors cursor-pointer"
                           >
                             Enter class
                           </button>
-                        ) : c.isPremium && !c.hasPremiumAccess ? (
-                          <button
-                            onClick={() => handleEnrollCourse(c.id)}
-                            className="bg-gradient-to-r from-amber-600 to-[#ff7b00] hover:from-amber-700 hover:to-[#e66f00] text-white text-xs font-bold py-1.5 px-4.5 rounded-lg transition-colors cursor-pointer border-0 flex items-center gap-1.5 shadow-md shadow-orange-950/20"
-                          >
-                            <Lock className="w-3 h-3" />
-                            <span>Unlock Class</span>
-                          </button>
                         ) : (
-                          <button
-                            onClick={() => handleEnrollCourse(c.id)}
-                            className="bg-[#ff7b00] hover:bg-[#e66f00] text-white text-xs font-bold py-1.5 px-4.5 rounded-lg transition-colors cursor-pointer border-0"
-                          >
-                            {t("enrollNow")}
-                          </button>
+                          <>
+                            <button
+                              onClick={() => handleAddToCart(c, "course")}
+                              className="bg-[#21262d] hover:border-[#ff7b00] border border-[#30363d] text-white p-2 rounded-lg transition-colors cursor-pointer flex items-center justify-center shrink-0"
+                              title="Add to Cart"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-[#ff7b00]">
+                                <circle cx="9" cy="21" r="1" />
+                                <circle cx="20" cy="21" r="1" />
+                                <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+                              </svg>
+                            </button>
+                            {c.isPremium && !c.hasPremiumAccess ? (
+                              <button
+                                onClick={() => handleEnrollCourse(c.id)}
+                                className="bg-gradient-to-r from-amber-600 to-[#ff7b00] hover:from-amber-700 hover:to-[#e66f00] text-white text-xs font-bold py-1.5 px-4 rounded-lg transition-colors cursor-pointer border-0 flex items-center gap-1 shadow-md shadow-orange-950/20"
+                              >
+                                <Lock className="w-3 h-3" />
+                                <span>Unlock</span>
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleEnrollCourse(c.id)}
+                                className="bg-[#ff7b00] hover:bg-[#e66f00] text-white text-xs font-bold py-1.5 px-4 rounded-lg transition-colors cursor-pointer border-0"
+                              >
+                                {t("enrollNow")}
+                              </button>
+                            )}
+                          </>
                         )}
                       </div>
                     </div>
@@ -2066,16 +2393,29 @@ export default function App() {
                             <span>Awaiting Proof Review</span>
                           </div>
                         ) : (
-                          <button
-                            onClick={() => {
-                              setPurchasePdfItem(pdf);
-                              setPaymentPhone(user?.phone || "");
-                            }}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-1.5 px-3.5 rounded flex items-center gap-1.5 transition-all shadow shadow-emerald-950/20"
-                          >
-                            <Unlock className="w-3.5 h-3.5" />
-                            <span>Buy PDF</span>
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => handleAddToCart(pdf, "pdf")}
+                              className="bg-[#21262d] hover:border-[#ff7b00] border border-[#30363d] text-white p-2 rounded-lg transition-colors cursor-pointer flex items-center justify-center shrink-0"
+                              title="Add to Cart"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-[#ff7b00]">
+                                <circle cx="9" cy="21" r="1" />
+                                <circle cx="20" cy="21" r="1" />
+                                <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={() => {
+                                setPurchasePdfItem(pdf);
+                                setPaymentPhone(user?.phone || "");
+                              }}
+                              className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold py-1.5 px-3 rounded flex items-center gap-1 transition-all shadow shadow-emerald-950/20"
+                            >
+                              <Unlock className="w-3.5 h-3.5" />
+                              <span>Buy PDF</span>
+                            </button>
+                          </div>
                         )
                       ) : (
                         <a
@@ -3718,6 +4058,314 @@ export default function App() {
                 </div>
               </form>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* UPGRADE TO PRO MODAL */}
+      {showProModal && user && (
+        <div className="fixed inset-0 min-h-screen bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 animate-fade-in" id="pro-upgrade-modal">
+          <div className="bg-[#161b22] border border-amber-500/30 rounded-2xl w-full max-w-lg shadow-2xl relative overflow-hidden flex flex-col">
+            
+            {/* Header border flash */}
+            <div className="h-1 w-full bg-gradient-to-r from-amber-500 via-yellow-500 to-orange-500"></div>
+            
+            <div className="p-6 space-y-5">
+              <div className="flex justify-between items-start">
+                <div>
+                  <span className="text-[10px] font-mono font-bold tracking-wider uppercase text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 rounded flex items-center gap-1.5 w-fit">
+                    <Sparkles className="w-3 h-3 text-amber-400 animate-spin" />
+                    <span>ELITE PRO MEMBERSHIP</span>
+                  </span>
+                  <h3 className="text-xl font-extrabold text-white mt-1.5 leading-snug">Become an Elite Pro Member</h3>
+                </div>
+                <button 
+                  onClick={() => {
+                    setShowProModal(false);
+                    setPaymentPhone("");
+                  }}
+                  className="p-1 px-2.5 rounded bg-[#21262d] text-gray-400 hover:text-white hover:bg-red-500/10 hover:text-red-400 transition-all font-mono text-sm"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Pro Perks */}
+              <div className="bg-[#0d1117] border border-[#30363d] rounded-xl p-4 space-y-3">
+                <h4 className="text-xs font-bold text-amber-400 tracking-wider uppercase font-mono">Unlock VIP Privilege Access:</h4>
+                <ul className="space-y-2 text-xs text-slate-300">
+                  <li className="flex items-center gap-2">
+                    <span className="text-[#ff7b00]">✓</span>
+                    <span>Unlimited access to <strong>all premium curriculum courses</strong></span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="text-[#ff7b00]">✓</span>
+                    <span>Free download of <strong>all premium technical PDF books</strong></span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="text-[#ff7b00]">✓</span>
+                    <span>Full access to <strong>classroom programming tools</strong> & challenges</span>
+                  </li>
+                  <li className="flex items-center gap-2">
+                    <span className="text-[#ff7b00]">✓</span>
+                    <span>Priority student review & official PDF verification</span>
+                  </li>
+                </ul>
+              </div>
+
+              {/* Pricing overview */}
+              <div className="bg-amber-500/5 border border-amber-500/20 rounded-xl p-4 flex gap-3.5 items-center justify-between">
+                <div>
+                  <p className="text-[10px] text-gray-500 font-mono">ONE-TIME LIFE-TIME ACCESS</p>
+                  <p className="text-base font-extrabold text-amber-400 font-mono mt-0.5">UGX 100,000 / $25</p>
+                </div>
+                <div className="text-right">
+                  <span className="bg-amber-500/20 text-amber-300 border border-amber-500/30 px-2 py-1 rounded text-[10px] font-extrabold uppercase font-mono tracking-wider">
+                    Best Value
+                  </span>
+                </div>
+              </div>
+
+              {/* Payment selector */}
+              <div className="space-y-2">
+                <label className="text-xs font-bold text-gray-400 block uppercase tracking-wider font-mono">Select MoMo Network Provider</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod("MTN")}
+                    className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all ${
+                      paymentMethod === "MTN" 
+                        ? "border-yellow-400 bg-yellow-500/10 text-yellow-300" 
+                        : "border-[#30363d] bg-[#0d1117] text-gray-400 hover:border-gray-600"
+                    }`}
+                  >
+                    <span className="text-xs font-black uppercase tracking-tight">MTN Mobile Money</span>
+                    <span className="text-[9px] font-mono opacity-80">UGX / RWF</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod("Airtel")}
+                    className={`p-3 rounded-xl border flex flex-col items-center gap-1.5 transition-all ${
+                      paymentMethod === "Airtel" 
+                        ? "border-red-400 bg-red-500/10 text-red-300" 
+                        : "border-[#30363d] bg-[#0d1117] text-gray-400 hover:border-gray-600"
+                    }`}
+                  >
+                    <span className="text-xs font-black uppercase tracking-tight">Airtel Money</span>
+                    <span className="text-[9px] font-mono opacity-80">UGX / TZ</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Payment Instructions & Number */}
+              <div className="bg-[#21262d] border border-[#30363d] rounded-xl p-3.5 space-y-1.5">
+                <p className="text-xs text-slate-300 leading-relaxed">
+                  Send <strong>UGX 100,000</strong> on our official hotline telephone:
+                </p>
+                <div className="bg-[#0d1117] rounded-lg p-2.5 flex items-center justify-between border border-[#30363d]">
+                  <span className="font-mono text-xs font-extrabold text-white text-lg tracking-wider">+256 788 021 341</span>
+                  <span className="text-[10px] text-gray-500 font-bold uppercase font-mono">(KABASA ROBERT)</span>
+                </div>
+              </div>
+
+              {/* Submission Form */}
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!paymentPhone) return;
+
+                  setIsSubmitAccessLoading(true);
+                  try {
+                    const response = await fetch("/api/premium/pro/purchase", {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${user.email}`
+                      },
+                      body: JSON.stringify({
+                        phone: paymentPhone,
+                        paymentMethod: paymentMethod,
+                        amount: 100000
+                      })
+                    });
+                    const resJson = await response.json();
+                    if (resJson.success) {
+                      alert("💸 Your Pro Upgrade request has been logged successfully!\n\nOur validation team will instantly activate your ELITE PRO access within 10-15 minutes once verified.");
+                      setShowProModal(false);
+                      setPaymentPhone("");
+                      fetchAllData();
+                    } else {
+                      alert(resJson.error || "Something failed transmitting Pro request.");
+                    }
+                  } catch (err: any) {
+                    alert(`Network error transmitting details: ${err?.message}`);
+                  } finally {
+                    setIsSubmitAccessLoading(false);
+                  }
+                }}
+                className="space-y-4"
+              >
+                <div>
+                  <label className="text-xs font-bold text-gray-400 block uppercase tracking-wider font-mono mb-1">Your Sender MoMo Phone</label>
+                  <input
+                    type="text"
+                    value={paymentPhone}
+                    onChange={(e) => setPaymentPhone(e.target.value)}
+                    placeholder="e.g. +256 788 123 456"
+                    required
+                    className="w-full bg-[#0d1117] border border-[#30363d] text-white py-2 px-3.5 rounded-xl text-xs outline-none focus:border-[#ff7b00] font-mono placeholder:text-gray-600"
+                  />
+                </div>
+
+                <div className="flex gap-3 justify-end pt-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowProModal(false);
+                      setPaymentPhone("");
+                    }}
+                    className="bg-[#21262d] hover:bg-[#30363d] text-gray-300 text-xs font-bold py-2 px-4 rounded-xl transition-colors font-mono"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isSubmitAccessLoading}
+                    className="bg-gradient-to-r from-amber-500 to-[#ff7b00] hover:from-amber-600 hover:to-[#e66f00] text-white text-xs font-bold py-2 px-5 rounded-xl flex items-center gap-1.5 font-mono shadow-md disabled:opacity-50 transition-colors"
+                  >
+                    {isSubmitAccessLoading ? "Upgrading..." : "Confirm Pro Payment"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SHOPPING CART DRAWER */}
+      {showCartDrawer && user && (
+        <div className="fixed inset-0 z-50 flex justify-end" id="shopping-cart-drawer">
+          {/* Backdrop */}
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-xs transition-opacity" onClick={() => setShowCartDrawer(false)} />
+
+          {/* Drawer content */}
+          <div className="relative w-full max-w-md bg-[#161b22] border-l border-[#30363d] h-full shadow-2xl flex flex-col justify-between z-10 animate-slide-in">
+            {/* Header */}
+            <div className="p-5 border-b border-[#30363d] flex justify-between items-center bg-[#0d1117]/50">
+              <div className="flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-[#ff7b00]">
+                  <circle cx="9" cy="21" r="1" />
+                  <circle cx="20" cy="21" r="1" />
+                  <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+                </svg>
+                <h3 className="text-sm font-extrabold text-white tracking-wider uppercase font-mono">Shopping Cart ({cart.length})</h3>
+              </div>
+              <button 
+                onClick={() => setShowCartDrawer(false)}
+                className="text-gray-400 hover:text-white font-mono text-sm border-0 bg-transparent cursor-pointer"
+              >
+                Close ✕
+              </button>
+            </div>
+
+            {/* Cart list */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-4">
+              {cart.length === 0 ? (
+                <div className="h-64 flex flex-col items-center justify-center text-center space-y-3">
+                  <span className="text-4xl">🛒</span>
+                  <p className="text-xs text-gray-500 font-mono">Your shopping cart is currently empty.</p>
+                  <button
+                    onClick={() => {
+                      setShowCartDrawer(false);
+                      setActiveTab("courses");
+                    }}
+                    className="bg-[#21262d] border border-[#30363d] text-white hover:text-[#ff7b00] px-4 py-1.5 rounded-xl text-xs font-mono cursor-pointer"
+                  >
+                    Browse Syllabus Directory
+                  </button>
+                </div>
+              ) : (
+                cart.map((c, idx) => (
+                  <div key={idx} className="bg-[#0d1117] border border-[#30363d] rounded-xl p-3 flex gap-3 items-center justify-between">
+                    <img src={c.thumbnailUrl} alt={c.title} className="w-12 h-12 object-cover rounded-lg border border-[#30363d]" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-bold text-white truncate">{c.title}</p>
+                      <p className="text-[10px] font-mono text-[#ff7b00] uppercase tracking-wider">{c.type === "course" ? "Course Track" : "Technical Manual"}</p>
+                    </div>
+                    <div className="text-right flex flex-col items-end gap-1 shrink-0">
+                      <span className="text-xs font-extrabold text-white font-mono">
+                        {c.type === "pdf" ? "UGX 15,000" : `$${c.price}`}
+                      </span>
+                      <button
+                        onClick={() => handleRemoveFromCart(c.id, c.type)}
+                        className="text-[10px] text-red-400 hover:text-red-300 font-mono"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Total & Checkout */}
+            {cart.length > 0 && (
+              <div className="p-5 border-t border-[#30363d] bg-[#0d1117]/80 space-y-4">
+                <div className="flex justify-between items-center text-xs font-mono text-slate-300">
+                  <span>Subtotal:</span>
+                  <span className="font-extrabold text-white">
+                    {cart.filter(i => i.type === "course").length} Course(s) + {cart.filter(i => i.type === "pdf").length} Book(s)
+                  </span>
+                </div>
+
+                <button
+                  onClick={async () => {
+                    // Purchase each course/book in the cart in sequence
+                    setGlobalLoader({ isVisible: true, message: "Processing unified cart checkout..." });
+                    try {
+                      for (const item of cart) {
+                        if (item.type === "course") {
+                          // Post to course enroll api
+                          await fetch(`/api/courses/${item.id}/enroll`, {
+                            method: "POST",
+                            headers: {
+                              "Content-Type": "application/json",
+                              "Authorization": `Bearer ${user.email}`
+                            }
+                          });
+                        } else if (item.type === "pdf") {
+                          // Post to pdf purchases api
+                          await fetch("/api/pdfs/purchase", {
+                            method: "POST",
+                            headers: {
+                              "Content-Type": "application/json",
+                              "Authorization": `Bearer ${user.email}`
+                            },
+                            body: JSON.stringify({
+                              pdfId: item.id,
+                              phone: user.phone || "+256 788 021 341",
+                              proofUrl: `https://dummyimage.com/600x800/ff7b00/ffffff&text=RECEIPT+CART+CHECKOUT`
+                            })
+                          });
+                        }
+                      }
+                      setCart([]);
+                      setShowCartDrawer(false);
+                      alert("🎉 Cart checkout successful! All selected curriculum tracks and manuals have been registered or queued for administrator validation.");
+                      fetchAllData();
+                    } catch (err: any) {
+                      alert(`Checkout failed: ${err.message}`);
+                    } finally {
+                      setGlobalLoader({ isVisible: false, message: "" });
+                    }
+                  }}
+                  className="w-full bg-[#ff7b00] hover:bg-[#e66f00] text-white py-2.5 rounded-xl text-xs font-extrabold tracking-wide cursor-pointer transition-colors border-0 uppercase font-mono shadow-md shadow-orange-950/20 active:scale-98"
+                >
+                  Proceed to Unified Checkout
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}

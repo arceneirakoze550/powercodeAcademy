@@ -7,6 +7,9 @@ import { GoogleGenAI } from "@google/genai";
 import pg from "pg";
 import http from "http";
 import { Server as SocketIOServer } from "socket.io";
+import multer from "multer";
+
+const upload = multer({ storage: multer.memoryStorage() });
 
 const { Pool } = pg;
 
@@ -1898,7 +1901,7 @@ app.post("/api/auth/register", async (req, res) => {
   }
 
   const token = newUser.email; // Simulating JWT
-  res.json({ token, user: newUser });
+  res.json({ token, user: { ...newUser, isPro: newUser.role === "ADMIN" } });
 });
 
 app.post("/api/auth/login", (req, res) => {
@@ -1930,7 +1933,9 @@ app.post("/api/auth/login", (req, res) => {
   saveDB(db);
 
   const token = user.email; // Simulating JWT
-  res.json({ token, user });
+  db.premiumAccess = db.premiumAccess || [];
+  const isPro = db.premiumAccess.some((a: any) => a.userId === user.id && a.contentType === "PLATFORM_PRO" && a.status === "ACTIVE");
+  res.json({ token, user: { ...user, isPro: !!isPro || user.role === "ADMIN" } });
 });
 
 app.get("/api/auth/me", (req, res) => {
@@ -1938,7 +1943,10 @@ app.get("/api/auth/me", (req, res) => {
   if (!user) {
     return res.status(401).json({ error: "Not authorized" });
   }
-  res.json({ user });
+  const db = getDB();
+  db.premiumAccess = db.premiumAccess || [];
+  const isPro = db.premiumAccess.some((a: any) => a.userId === user.id && a.contentType === "PLATFORM_PRO" && a.status === "ACTIVE");
+  res.json({ user: { ...user, isPro: !!isPro || user.role === "ADMIN" } });
 });
 
 app.post("/api/users/profile", async (req, res) => {
@@ -2101,8 +2109,9 @@ app.get("/api/courses", (req, res) => {
 
   const coursesWithUserData = rawCourses.map(c => {
     // A course has premium access if it is free, OR if the user is an admin,
-    // OR if the user has paid and has an active entry in premiumAccess.
-    const hasAccess = !c.isPremium || (user && (user.role === "ADMIN" || db.premiumAccess.some(a => a.userId === user.id && a.contentType === "COURSE" && Number(a.contentId) === c.id && a.status === "ACTIVE")));
+    // OR if the user is a platform pro, OR if they have direct course purchase.
+    const isPlatformPro = user && db.premiumAccess.some(a => a.userId === user.id && a.contentType === "PLATFORM_PRO" && a.status === "ACTIVE");
+    const hasAccess = !c.isPremium || (user && (user.role === "ADMIN" || isPlatformPro || db.premiumAccess.some(a => a.userId === user.id && a.contentType === "COURSE" && Number(a.contentId) === c.id && a.status === "ACTIVE")));
     return {
       ...c,
       hasPremiumAccess: !!hasAccess,
@@ -2362,10 +2371,17 @@ app.get("/api/pdfs", (req, res) => {
     list = list.filter(p => !p.status || p.status === "Published");
   }
 
-  const pdfsWithBookmarks = list.map(p => ({
-    ...p,
-    isBookmarked: bookmarkedIds.includes(p.id)
-  }));
+  db.premiumAccess = db.premiumAccess || [];
+  const isPlatformPro = user && db.premiumAccess.some(a => a.userId === user.id && a.contentType === "PLATFORM_PRO" && a.status === "ACTIVE");
+
+  const pdfsWithBookmarks = list.map(p => {
+    const hasAccess = !p.isPremium || (user && (user.role === "ADMIN" || isPlatformPro || db.pdfPurchases?.some(acc => acc.userId === user.id && acc.pdfId === p.id && acc.status === "APPROVED")));
+    return {
+      ...p,
+      isBookmarked: bookmarkedIds.includes(p.id),
+      hasPremiumAccess: !!hasAccess
+    };
+  });
 
   res.json({ pdfs: pdfsWithBookmarks });
 });
@@ -3626,8 +3642,22 @@ app.delete("/api/certificates/:code", (req, res) => {
 
 // COMPUTER LOCAL FILE UPLOAD DIALOG OVERLAY (CLOUDINARY STORAGE SIMULATOR API)
 // Converts computer files beautifully to persistent Local/Simulated cloud assets on our internal db
-app.post("/api/upload", (req, res) => {
-  const { fileName, fileType, fileData } = req.body; // fileData is base64 representation if sent, or empty
+app.post("/api/upload", upload.any(), (req: any, res) => {
+  let fileName = req.body.fileName;
+  let fileType = req.body.fileType || "image";
+
+  // If a multipart file was uploaded via multer:
+  if (req.files && req.files.length > 0) {
+    const file = req.files[0];
+    fileName = file.originalname;
+    if (file.mimetype.startsWith("video/")) {
+      fileType = "video";
+    } else if (file.mimetype.startsWith("image/")) {
+      fileType = "image";
+    } else if (file.mimetype === "application/pdf" || file.originalname.endsWith(".pdf")) {
+      fileType = "pdf";
+    }
+  }
 
   if (!fileName) {
     return res.status(400).json({ error: "fileName parameter is required" });
@@ -3635,7 +3665,7 @@ app.post("/api/upload", (req, res) => {
 
   // Generate a premium asset identifier matching the structure of Cloudinary paths
   const randomSlug = Math.random().toString(36).substring(2, 10);
-  const folder = fileType === "video" ? "videos" : "images";
+  const folder = fileType === "video" ? "videos" : (fileType === "pdf" ? "pdfs" : "images");
   const mockCloudinaryUrl = `https://res.cloudinary.com/powercode/image/upload/v172605/${folder}/${randomSlug}_${fileName.replace(/\s+/g, "_")}`;
 
   const db = getDB();
@@ -5199,7 +5229,8 @@ app.put("/api/admin/tables/:table/:id", (req, res) => {
         const lIdx = (m.lessons || []).findIndex(l => l.id === rowId);
         if (lIdx !== -1) {
           const prevVideoUrl = m.lessons[lIdx].videoUrl || "";
-          const newVideoUrl = body.videoUrl !== undefined ? body.videoUrl : prevVideoUrl;
+          const videoInput = body.videoUrl !== undefined ? body.videoUrl : undefined;
+          const newVideoUrl = videoInput !== undefined ? videoInput : prevVideoUrl;
           if (newVideoUrl !== prevVideoUrl) {
             if (newVideoUrl === "") {
               notifyUser(-1, "Video Lecture Cleared 🧹", `Lesson "${m.lessons[lIdx].title}" video removed.`, "WARNING", "media");
@@ -5215,6 +5246,7 @@ app.put("/api/admin/tables/:table/:id", (req, res) => {
           m.lessons[lIdx] = { 
             ...m.lessons[lIdx], 
             ...body, 
+            videoUrl: newVideoUrl,
             id: rowId,
             quizId: body.quizId ? Number(body.quizId) : undefined
           };
