@@ -28,6 +28,7 @@ export interface Lesson {
   status?: string;
   deleted_at?: string;
   deleted_by?: string;
+  playbackId?: string | null;
 }
 
 export interface Module {

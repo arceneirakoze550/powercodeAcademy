@@ -8,8 +8,51 @@ import pg from "pg";
 import http from "http";
 import { Server as SocketIOServer } from "socket.io";
 import multer from "multer";
+import { EventEmitter } from "events";
 
 const upload = multer({ storage: multer.memoryStorage() });
+const videoUploadEmitter = new EventEmitter();
+
+// Handle post-upload events for lesson video uploads
+videoUploadEmitter.on("post-upload", async (data: { lessonId: number; videoUrl: string }) => {
+  console.log(`[videoUploadEmitter] Triggered 'post-upload' event for lesson ID \${data.lessonId}, video: \${data.videoUrl}`);
+  // Generate unique Playback ID
+  const playbackId = "pb_" + crypto.randomBytes(8).toString("hex");
+  
+  const db = getDB();
+  let found = false;
+  for (const c of db.courses) {
+    if (!c.modules) continue;
+    for (const m of c.modules) {
+      if (!m.lessons) continue;
+      const lesson = m.lessons.find(l => l.id === data.lessonId);
+      if (lesson) {
+        lesson.videoUrl = data.videoUrl;
+        lesson.playbackId = playbackId;
+        found = true;
+        break;
+      }
+    }
+    if (found) break;
+  }
+  
+  if (found) {
+    saveDB(db);
+    console.log(`[videoUploadEmitter] Generated playback ID: \${playbackId} for lesson ID \${data.lessonId} in cache.`);
+  }
+
+  if (pgPool && pgConnectedStatus) {
+    try {
+      await pgPool.query(
+        "UPDATE lessons SET video_url = \$1, playback_id = \$2 WHERE id = \$3",
+        [data.videoUrl, playbackId, data.lessonId]
+      );
+      console.log(`[videoUploadEmitter] Generated unique playback ID: \${playbackId} for lesson ID \${data.lessonId} in lessons table.`);
+    } catch (err) {
+      console.error("[videoUploadEmitter] Failed to update playback_id in PostgreSQL:", err);
+    }
+  }
+});
 
 const { Pool } = pg;
 
@@ -17,6 +60,9 @@ const pgConnectionString = process.env.DATABASE_URL || process.env.NEON_DATABASE
 let pgPool: pg.Pool | null = null;
 let pgConnectedStatus = false;
 let dbCachedInstance: any = null;
+
+// Pre-declare DB file path for both connection states
+const DB_FILE = path.join(process.cwd(), "db_state.json");
 
 if (pgConnectionString) {
   console.log("[Database] Found system connection string. Starting Neon PostgreSQL pool/client...");
@@ -34,26 +80,21 @@ if (pgConnectionString) {
     .catch((err) => {
       console.error(`
 ====================================================================
-  CRITICAL DATABASE CONNECTION ERROR: FAILED TO CONNECT TO NEON!
+  NON-FATAL DATABASE CONNECTION ERROR: FAILED TO CONNECT TO NEON!
   ${err.message}
-  The server will now shut down to prevent silent json fallbacks.
+  The server will proceed using the local offline JSON / Memory database.
 ====================================================================
 `);
-      process.exit(1);
     });
 } else {
-  console.error(`
+  console.warn(`
 ====================================================================
-  CRITICAL CONFIGURATION ERROR: DATABASE_URL IS NOT DEFINED!
-  The Neon PostgreSQL connection URL must be provided in the 
-  DATABASE_URL environment variable.
+  DATABASE_URL IS NOT DEFINED!
+  The Neon PostgreSQL connection URL was not provided.
+  The server will proceed using the local offline JSON / Memory database.
 ====================================================================
 `);
-  process.exit(1);
 }
-
-// Pre-declare DB file path
-const DB_FILE = path.join(process.cwd(), "db_state.json");
 
 // Synchronization and Loading Helper Functions
 async function persistStateToPostgres(state: DbState) {
@@ -117,8 +158,8 @@ async function persistStateToPostgres(state: DbState) {
           if (Array.isArray(m.lessons)) {
             for (const l of m.lessons) {
               await pgPool.query(`
-                INSERT INTO lessons (id, module_id, title, content, video_url, duration_minutes, is_preview_allowed, quiz_id, status, deleted_at, deleted_by)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                INSERT INTO lessons (id, module_id, title, content, video_url, duration_minutes, is_preview_allowed, quiz_id, status, deleted_at, deleted_by, playback_id)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
                 ON CONFLICT (id) DO UPDATE SET
                   module_id = EXCLUDED.module_id,
                   title = EXCLUDED.title,
@@ -129,11 +170,13 @@ async function persistStateToPostgres(state: DbState) {
                   quiz_id = EXCLUDED.quiz_id,
                   status = EXCLUDED.status,
                   deleted_at = EXCLUDED.deleted_at,
-                  deleted_by = EXCLUDED.deleted_by
+                  deleted_by = EXCLUDED.deleted_by,
+                  playback_id = EXCLUDED.playback_id
               `, [
                 l.id, m.id, l.title, l.content || "", l.videoUrl || "",
                 l.durationMinutes || 10, !!l.isPreviewAllowed, l.quizId || null,
-                l.status || 'Published', l.deleted_at || null, l.deleted_by || null
+                l.status || 'Published', l.deleted_at || null, l.deleted_by || null,
+                l.playbackId || null
               ]);
             }
           }
@@ -508,7 +551,8 @@ async function loadDBFromPostgres(): Promise<DbState> {
         quizId: row.quiz_id || undefined,
         status: row.status || "Published",
         deleted_at: row.deleted_at || null,
-        deleted_by: row.deleted_by || null
+        deleted_by: row.deleted_by || null,
+        playbackId: row.playback_id || null
       });
     });
 
@@ -827,6 +871,7 @@ async function initPgDatabase() {
       "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'Published';",
       "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS deleted_at TEXT;",
       "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS deleted_by TEXT;",
+      "ALTER TABLE lessons ADD COLUMN IF NOT EXISTS playback_id TEXT;",
 
       "ALTER TABLE tutorials ADD COLUMN IF NOT EXISTS title TEXT;",
       "ALTER TABLE tutorials ADD COLUMN IF NOT EXISTS category TEXT;",
@@ -1097,9 +1142,12 @@ function signCertificate(certCode: string, userName: string, courseTitle: string
 
 // Initialize express app
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
 const server = http.createServer(app);
+server.keepAliveTimeout = 120000;
+server.headersTimeout = 120500; // slightly higher than keepAliveTimeout
+
 const io = new SocketIOServer(server, {
   cors: {
     origin: "*",
@@ -1196,6 +1244,7 @@ interface Course {
       status?: string;
       deleted_at?: string;
       deleted_by?: string;
+      playbackId?: string | null;
     }[];
   }[];
 }
@@ -1400,6 +1449,32 @@ const defaultInitialState: DbState = {
       createdAt: new Date().toISOString(),
       isVerified: true,
       score: 450,
+    },
+    {
+      id: 3,
+      name: "Arcene Irakoze",
+      email: "arceneirakoze550@gmail.com",
+      passwordHash: "admin123",
+      role: "ADMIN",
+      avatarUrl: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100",
+      learningStreak: 12,
+      lastActiveAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      isVerified: true,
+      score: 500,
+    },
+    {
+      id: 4,
+      name: "Arcene Irakoze",
+      email: "arceneirakoze@proton.me",
+      passwordHash: "my_mother",
+      role: "ADMIN",
+      avatarUrl: "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100",
+      learningStreak: 12,
+      lastActiveAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      isVerified: true,
+      score: 500,
     }
   ],
   courses: [
@@ -1777,6 +1852,32 @@ function ensureDbSanitized(parsed: any): DbState {
   return parsed as DbState;
 }
 
+function initLocalDatabaseFallback() {
+  console.log("[Database Fallback] Initializing local database fallback...");
+  if (fs.existsSync(DB_FILE)) {
+    try {
+      const raw = fs.readFileSync(DB_FILE, "utf8");
+      dbCachedInstance = JSON.parse(raw);
+      dbCachedInstance = ensureDbSanitized(dbCachedInstance);
+      console.log("[Database Fallback] Successfully loaded local data from db_state.json");
+    } catch (e: any) {
+      console.error("[Database Fallback] Failed to parse db_state.json, falling back to defaultInitialState:", e);
+      dbCachedInstance = JSON.parse(JSON.stringify(defaultInitialState));
+    }
+  } else {
+    console.log("[Database Fallback] Creating new local db state from defaultInitialState...");
+    dbCachedInstance = JSON.parse(JSON.stringify(defaultInitialState));
+    try {
+      fs.writeFileSync(DB_FILE, JSON.stringify(dbCachedInstance, null, 2), "utf8");
+    } catch (e: any) {
+      console.error("[Database Fallback] Failed to write initial db_state.json:", e);
+    }
+  }
+}
+
+// Immediately initialize on load so the cache is never null!
+initLocalDatabaseFallback();
+
 function getDB(): DbState {
   if (!dbCachedInstance) {
     console.log("[Database] getDB called before cache initialized. Providing default state.");
@@ -1789,8 +1890,14 @@ function saveDB(state: DbState): void {
   try {
     dbCachedInstance = state;
     
+    // Always write to local JSON file for offline/local desktop resilience
+    try {
+      fs.writeFileSync(DB_FILE, JSON.stringify(state, null, 2), "utf8");
+    } catch (fsErr: any) {
+      console.error("[Database Save] Failed to write db_state.json locally:", fsErr);
+    }
+    
     // Enforce instant background persistence directly to Neon PostgreSQL. 
-    // No writes to db_state.json file ever occur during operations anymore.
     if (pgPool && pgConnectedStatus) {
       persistStateToPostgres(state).catch((err) => {
         console.error("[Database Sync] Error persisting state to Neon PostgreSQL:", err);
@@ -3162,13 +3269,27 @@ app.delete("/api/lessons/:id", (req, res) => {
 });
 
 // ADD OR CHANGE VIDEO TO SPECIFIC LESSON
-app.post("/api/courses/:courseId/lessons/:lessonId/video", (req, res) => {
+app.post("/api/courses/:courseId/lessons/:lessonId/video", upload.any(), (req: any, res) => {
   const user = parseUserFromAuth(req);
   if (!user || user.role !== "ADMIN") return res.status(403).json({ error: "Admin access required" });
 
   const courseId = Number(req.params.courseId);
   const lessonId = Number(req.params.lessonId);
-  const { videoUrl } = req.body;
+  let videoUrl = req.body.videoUrl;
+
+  // Process multipart/form-data upload via multer
+  if (req.files && req.files.length > 0) {
+    const file = req.files[0];
+    
+    // File size validator (e.g. 100MB limit)
+    const maxSizeBytes = 100 * 1024 * 1024; // 100 MB
+    if (file.size > maxSizeBytes) {
+      return res.status(400).json({ error: "File size exceeds the limit of 100MB" });
+    }
+
+    const randomSlug = Math.random().toString(36).substring(2, 10);
+    videoUrl = `https://res.cloudinary.com/powercode/image/upload/v172605/videos/${randomSlug}_${file.originalname.replace(/\s+/g, "_")}`;
+  }
 
   const db = getDB();
   const courseIdx = db.courses.findIndex(c => c.id === courseId);
@@ -3196,6 +3317,12 @@ app.post("/api/courses/:courseId/lessons/:lessonId/video", (req, res) => {
       notifyUser(0, "Class Video Removed ⚠️", `Lecture video has been taken down for "${foundLesson.title}".`, "WARNING", "classroom");
       io.emit("VIDEO_DELETED", { title: foundLesson.title });
     } else {
+      // Trigger post-upload event to generate a unique Playback ID in the lessons table
+      videoUploadEmitter.emit("post-upload", {
+        lessonId,
+        videoUrl: newVideoUrl
+      });
+
       notifyUser(-1, "Video Lecture Registered! 🎥", `Lesson "${foundLesson.title}" video uploaded: ${newVideoUrl}`, "SUCCESS", "media");
       notifyUser(0, "New Video Class Live! 🚀", `New lecture uploaded for "${foundLesson.title}". Watch it now!`, "SUCCESS", "classroom");
       io.emit("VIDEO_UPLOADED", { title: foundLesson.title, url: newVideoUrl });
@@ -3203,7 +3330,7 @@ app.post("/api/courses/:courseId/lessons/:lessonId/video", (req, res) => {
   }
 
   saveDB(db);
-  res.json({ success: true, course: db.courses[courseIdx] });
+  res.json({ success: true, course: db.courses[courseIdx], videoUrl: newVideoUrl, playbackId: foundLesson.playbackId });
 });
 
 // CHANGE USER PASSWORD (FOR ADMIN PASSWORD REVISIONS)
@@ -3657,6 +3784,14 @@ app.post("/api/upload", upload.any(), (req: any, res) => {
     } else if (file.mimetype === "application/pdf" || file.originalname.endsWith(".pdf")) {
       fileType = "pdf";
     }
+
+    // File size validator for video files
+    if (fileType === "video") {
+      const maxSizeBytes = 100 * 1024 * 1024; // 100 MB
+      if (file.size > maxSizeBytes) {
+        return res.status(400).json({ error: "File size exceeds the limit of 100MB" });
+      }
+    }
   }
 
   if (!fileName) {
@@ -3669,6 +3804,15 @@ app.post("/api/upload", upload.any(), (req: any, res) => {
   const mockCloudinaryUrl = `https://res.cloudinary.com/powercode/image/upload/v172605/${folder}/${randomSlug}_${fileName.replace(/\s+/g, "_")}`;
 
   const db = getDB();
+
+  // Trigger post-upload event for lesson table Playback ID generation
+  const lessonId = req.body.lessonId || req.query.lessonId;
+  if (fileType === "video" && lessonId) {
+    videoUploadEmitter.emit("post-upload", {
+      lessonId: Number(lessonId),
+      videoUrl: mockCloudinaryUrl
+    });
+  }
 
   // Index references inside local media collection tables depending on file properties
   if (fileType === "video") {
