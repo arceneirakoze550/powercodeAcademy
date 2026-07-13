@@ -3,7 +3,7 @@ import {
   Sparkles, Cpu, BookOpen, FileText, Terminal, Flame, Info, Menu, X, Globe,
   ChevronDown, LogOut, Award, MessageSquare, Plus, Search, Bookmark,
   HelpCircle, Send, ThumbsUp, Check, Lock, Unlock, ExternalLink, HelpCircle as FaqIcon,
-  ChevronLeft, ChevronRight, Download, Sun, Moon, Wifi, WifiOff, Trash2, AlertTriangle, Play
+  ChevronLeft, ChevronRight, Download, Sun, Moon, Wifi, WifiOff, Trash2, AlertTriangle, Play, Palette
 } from "lucide-react";
 
 import { useTheme } from "./utils/ThemeContext";
@@ -135,7 +135,8 @@ export default function App() {
   });
 
   // Global theme and accessibility context accessor
-  const { theme, toggleTheme } = useTheme();
+  const { theme, setTheme, toggleTheme } = useTheme();
+  const [themeDropdownOpen, setThemeDropdownOpen] = useState<boolean>(false);
 
   // Offline Caching & Intermittent connection states
   const [isOfflineSimulated, setIsOfflineSimulated] = useState<boolean>(() => {
@@ -214,6 +215,16 @@ export default function App() {
       window.removeEventListener("appinstalled", handleAppInstalled);
     };
   }, []);
+
+  useEffect(() => {
+    const dismissed = localStorage.getItem("powercode_install_prompt_dismissed_v2");
+    if (!dismissed && !isAppInstalled) {
+      const timer = setTimeout(() => {
+        setShowInstallPrompt(true);
+      }, 7000); // show after 7 seconds
+      return () => clearTimeout(timer);
+    }
+  }, [isAppInstalled]);
 
   const handleInstallApp = async (platformType?: "desktop" | "mobile" | "generic") => {
     const platform = platformType || (window.innerWidth < 768 ? "mobile" : "desktop");
@@ -633,6 +644,16 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
   const [paymentMethod, setPaymentMethod] = useState<"MTN" | "Airtel">("MTN");
   const [isSubmitAccessLoading, setIsSubmitAccessLoading] = useState<boolean>(false);
   
+  const [pdfProofUrl, setPdfProofUrl] = useState<string>("");
+  const [pdfProofUploading, setPdfProofUploading] = useState<boolean>(false);
+
+  const [courseProofUrl, setCourseProofUrl] = useState<string>("");
+  const [courseProofUploading, setCourseProofUploading] = useState<boolean>(false);
+
+  const [proProofUrl, setProProofUrl] = useState<string>("");
+  const [proProofUploading, setProProofUploading] = useState<boolean>(false);
+  const [showInstallPrompt, setShowInstallPrompt] = useState<boolean>(false);
+  
   // Custom Platform State values loaded from settings
   const [siteSettings, setSiteSettings] = useState<{ platformName: string; logoUrl: string; landingPromoBanner: string }>({
     platformName: "PowerCode Academy",
@@ -778,18 +799,16 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
     setClassroomVideoRetryCount(0);
     setIsRetrying(false);
 
-    const url = activeStepLesson.videoUrl;
+    let url = activeStepLesson.videoUrl;
     if (!url || url.trim() === "") {
       setClassroomVideoError("Error 153: Video player configuration error. The video source URL is empty or undefined.");
       setClassroomVideoLoading(false);
       return;
     }
 
-    // Check mixed content blocks
+    // Auto-upgrade protocol if running in HTTPS
     if (window.location.protocol === "https:" && url.startsWith("http://")) {
-      setClassroomVideoError("Error 153: Mixed Content Blocked. Loading HTTP video inside an HTTPS secure environment is blocked by your browser.");
-      setClassroomVideoLoading(false);
-      return;
+      url = url.replace("http://", "https://");
     }
 
     // Basic syntax/protocol validation
@@ -856,6 +875,38 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
     setTimeout(() => {
       runAttempt();
     }, 1000);
+  };
+
+  const handlePaymentScreenshotUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: "pdf" | "course" | "pro") => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const setUploading = type === "pdf" ? setPdfProofUploading : (type === "course" ? setCourseProofUploading : setProProofUploading);
+    const setProofUrl = type === "pdf" ? setPdfProofUrl : (type === "course" ? setCourseProofUrl : setProProofUrl);
+
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("fileName", file.name);
+      formData.append("fileType", "image");
+
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+      const resData = await response.json();
+      if (resData.success && resData.url) {
+        setProofUrl(resData.url);
+        triggerToast("Payment screenshot uploaded successfully!", "success");
+      } else {
+        alert(resData.error || "Failed to upload image.");
+      }
+    } catch (err: any) {
+      alert("Error uploading screenshot: " + err.message);
+    } finally {
+      setUploading(false);
+    }
   };
 
   // Helper i18n translator
@@ -1706,14 +1757,46 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
                 </>
               )}
 
-              {/* Theme Toggle Context */}
-              <button
-                onClick={toggleTheme}
-                className="bg-[#21262d] border border-[#30363d] p-2 rounded-lg text-xs text-white hover:border-[#ff7b00] transition-colors cursor-pointer flex items-center justify-center shrink-0"
-                title={`Switch to ${theme === "dark" ? "High-Contrast Light Mode" : "Dark Accessibility Mode"}`}
-              >
-                {theme === "dark" ? <Sun className="w-3.5 h-3.5 text-amber-400" /> : <Moon className="w-3.5 h-3.5 text-[#ff7b00]" />}
-              </button>
+              {/* Theme Dropdown Selector */}
+              <div className="relative">
+                <button
+                  onClick={() => setThemeDropdownOpen(!themeDropdownOpen)}
+                  className="bg-[#21262d] border border-[#30363d] p-2 rounded-lg text-xs text-white hover:border-[#ff7b00] transition-colors cursor-pointer flex items-center justify-center shrink-0 gap-1"
+                  title="Switch Visual Accessibility Theme"
+                >
+                  <Palette className="w-3.5 h-3.5 text-[#ff7b00]" />
+                  <span className="hidden lg:inline text-[10px] font-bold text-gray-300 uppercase">Theme</span>
+                  <ChevronDown className="w-3 h-3 text-gray-400" />
+                </button>
+                {themeDropdownOpen && (
+                  <div className="absolute right-0 mt-2 w-48 bg-[#161b22] border border-[#30363d] rounded-xl shadow-2xl p-1.5 z-50 animate-fade-in space-y-1">
+                    {[
+                      { code: "dark", label: "🌌 Cosmic Slate", bg: "bg-[#0d1117]" },
+                      { code: "light", label: "💡 Studio Light", bg: "bg-white border border-gray-200" },
+                      { code: "blue-white", label: "🟦 Blue & White", bg: "bg-[#f0f4f8] border-l-4 border-blue-600" },
+                      { code: "green-white", label: "🟩 Green & White", bg: "bg-[#f2f7f4] border-l-4 border-emerald-600" },
+                      { code: "dark-blue", label: "🐳 Midnight Deep", bg: "bg-[#020b1e]" },
+                      { code: "dark-green", label: "🌲 Forest Emerald", bg: "bg-[#03150d]" }
+                    ].map((item) => (
+                      <button
+                        key={item.code}
+                        onClick={() => {
+                          setTheme(item.code as any);
+                          setThemeDropdownOpen(false);
+                        }}
+                        className={`w-full text-left text-xs px-2.5 py-1.5 rounded-lg flex items-center justify-between font-medium transition-all ${
+                          theme === item.code 
+                            ? "bg-[#ff7b00]/10 text-[#ff7b00] border border-[#ff7b00]/20 font-bold" 
+                            : "text-slate-300 hover:bg-[#21262d] hover:text-white"
+                        }`}
+                      >
+                        <span>{item.label}</span>
+                        <div className={`w-3.5 h-3.5 rounded ${item.bg}`} />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               {/* Dynamic Notification Bell with Badge Count */}
               {user && (
@@ -1878,17 +1961,7 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
                 </div>
               )}
 
-              {/* PWA Get App Quick Header Trigger */}
-              {!isAppInstalled && (
-                <button
-                  onClick={() => handleInstallApp("desktop")}
-                  className="hidden md:flex bg-[#2ea043]/10 hover:bg-[#2ea043]/20 text-[#2ea043] border border-[#2ea043]/20 px-3 py-1.5 rounded-lg text-xs font-bold items-center gap-1.5 transition-colors cursor-pointer"
-                  title="Install PowerCode Academy on your device"
-                >
-                  <Download className="w-3.5 h-3.5 text-[#2ea043]" />
-                  <span>Get App</span>
-                </button>
-              )}
+
 
               {/* i18n Language Dropdown Button */}
               <div className="relative">
@@ -3193,8 +3266,8 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
                             src={classroomVideoFallbackActive ? "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4" : activeStepLesson.videoUrl}
                             controls
                             className="w-full h-full object-cover absolute inset-0"
-                            onError={() => {
-                              handleVideoLoadError("Error 153: Video playback failed. The media source could not be resolved, is formatted incorrectly, or lacks valid cross-origin permissions.");
+                            onError={(e) => {
+                              console.warn("[Video Playback Error Logged]", e);
                             }}
                           />
                         )}
@@ -3486,13 +3559,30 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
                       <span className="text-[9px] text-slate-500 font-mono">
                         {currentLessonNotes ? `${currentLessonNotes.length} chars` : "Notes empty"}
                       </span>
-                      <button
-                        onClick={handleSaveNotes}
-                        disabled={savingNotes}
-                        className="bg-[#ff7b00] hover:bg-[#e66f00] text-white text-[11px] font-bold py-1.5 px-3.5 rounded-lg flex items-center justify-center gap-1 cursor-pointer transition-colors"
-                      >
-                        {savingNotes ? "Saving..." : "Save Notes"}
-                      </button>
+                      <div className="flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (!currentLessonNotes) {
+                              alert("Please draft some notes first before exporting.");
+                              return;
+                            }
+                            pdfExportService.downloadPersonalNotes(activeStepLesson?.title || "Classroom Lecture", currentLessonNotes);
+                          }}
+                          className="bg-[#21262d] hover:bg-[#30363d] text-gray-300 hover:text-white border border-[#30363d] text-[11px] font-bold py-1.5 px-3 rounded-lg flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                          title="Export currently drafted study notes to PDF"
+                        >
+                          <Download className="w-3.5 h-3.5" />
+                          <span>Export PDF</span>
+                        </button>
+                        <button
+                          onClick={handleSaveNotes}
+                          disabled={savingNotes}
+                          className="bg-[#ff7b00] hover:bg-[#e66f00] text-white text-[11px] font-bold py-1.5 px-3.5 rounded-lg flex items-center justify-center gap-1 cursor-pointer transition-colors"
+                        >
+                          {savingNotes ? "Saving..." : "Save Notes"}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ) : (
@@ -3803,21 +3893,80 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
       </div> {/* End of DUAL COLUMN MULTI-MODULE BODY WORKSPACE */}
 
       {/* 4. WEB SITE FOOTER */}
-      <footer className="bg-[#11141a] border-t border-[#30363d] text-xs py-8 text-[#8b949e]" id="global-footer">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center gap-4">
-          <div className="flex items-center gap-2">
-            <img 
-              src="/powercodeacademy.png" 
-              alt="PowerCode Academy Logo" 
-              className="w-6 h-6 object-contain bg-[#161b22] border border-[#21262d] rounded p-0.5" 
-              referrerPolicy="no-referrer"
-              onError={(e) => {
-                (e.target as HTMLImageElement).style.display = 'none';
-              }}
-            />
-            <span className="font-extrabold text-white text-[11px] uppercase tracking-wider">{siteSettings.platformName}</span>
+      <footer className="bg-[#0b0d11] border-t border-[#30363d] text-xs py-10 text-[#8b949e]" id="global-footer">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+            {/* Branding Column */}
+            <div className="space-y-3.5">
+              <div className="flex items-center gap-2.5">
+                <img 
+                  src="/powercodeacademy.png" 
+                  alt="PowerCode Academy Logo" 
+                  className="w-7 h-7 object-contain bg-[#161b22] border border-[#ff7b00]/30 rounded-lg p-0.5" 
+                  referrerPolicy="no-referrer"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).style.display = 'none';
+                  }}
+                />
+                <span className="font-extrabold text-white text-xs uppercase tracking-wider">{siteSettings.platformName}</span>
+              </div>
+              <p className="text-[11px] leading-relaxed text-gray-400">
+                The premier international learning academy designed to equip the next generation of software engineers with world-class, production-ready full-stack skillsets.
+              </p>
+              {/* Trust Badge Row */}
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                <span className="px-2 py-0.5 rounded bg-emerald-950/40 border border-emerald-500/20 text-[9px] font-mono font-bold text-emerald-400 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-ping" />
+                  <span>SYSTEM ONLINE</span>
+                </span>
+                <span className="px-2 py-0.5 rounded bg-[#161b22] border border-[#30363d] text-[9px] font-mono text-gray-400">
+                  SSL SECURE
+                </span>
+              </div>
+            </div>
+
+            {/* Quick Links Column */}
+            <div className="space-y-3">
+              <h5 className="text-[10px] font-bold uppercase tracking-wider text-[#ff7b00] font-mono">Curriculum Focus</h5>
+              <ul className="space-y-2 text-[11px]">
+                <li><a href="#view-lobby" onClick={() => setActiveTab("lobby")} className="hover:text-white transition-colors">🚀 Interactive Course Lobby</a></li>
+                <li><a href="#view-classroom" onClick={() => { if (user) setActiveTab("classroom"); }} className="hover:text-white transition-colors">🎬 Student Classroom Player</a></li>
+                <li><a href="#view-community" onClick={() => setActiveTab("community")} className="hover:text-white transition-colors">💬 Discussion Board Forums</a></li>
+                <li><a href="#view-dashboard" onClick={() => { if (user) setActiveTab("dashboard"); }} className="hover:text-white transition-colors">📈 My Learning Progress</a></li>
+              </ul>
+            </div>
+
+            {/* Support hotline column */}
+            <div className="space-y-3">
+              <h5 className="text-[10px] font-bold uppercase tracking-wider text-teal-400 font-mono">Official Hotline</h5>
+              <p className="text-[11px] text-gray-400 leading-relaxed">
+                Direct immediate communication channel with the Founder & Head Administrator:
+              </p>
+              <div className="bg-[#161b22] border border-[#30363d] p-2.5 rounded-xl space-y-1">
+                <div className="text-[10.5px] font-bold text-white font-mono">ARCENE IRAKOZE</div>
+                <div className="text-[9.5px] text-teal-400 font-mono">Hotline: +250 796 599 461</div>
+                <div className="text-[9.5px] text-gray-500 font-mono">Email: support@powercode.academy</div>
+              </div>
+            </div>
+
+            {/* Coding wisdom quote generator */}
+            <div className="space-y-3">
+              <h5 className="text-[10px] font-bold uppercase tracking-wider text-amber-400 font-mono">Daily Tech Wisdom</h5>
+              <div className="bg-[#161b22]/50 border border-[#21262d] rounded-xl p-3 space-y-1.5 italic text-[11px] text-gray-300 leading-relaxed">
+                <p>"Continuous improvement is better than delayed perfection. True software craftsmanship is a path of daily small steps."</p>
+                <cite className="not-italic text-[9.5px] text-amber-400 font-mono font-bold block text-right">— PowerCode Academy Mentor</cite>
+              </div>
+            </div>
           </div>
-          <p className="text-[11px]">Powered by PowerCode Academy. © 2026. All rights reserved.</p>
+
+          <div className="border-t border-[#21262d] pt-6 flex flex-col sm:flex-row justify-between items-center gap-4 text-[11px]">
+            <p className="text-gray-500">Powered by PowerCode Academy. © 2026. Certified international training curriculum.</p>
+            <div className="flex gap-4 text-gray-500 font-mono text-[10px]">
+              <a href="#" className="hover:text-white">TERMS OF USE</a>
+              <span>•</span>
+              <a href="#" className="hover:text-white">PRIVACY PROTOCOLS</a>
+            </div>
+          </div>
         </div>
       </footer>
 
@@ -4282,6 +4431,10 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
                     alert("Please input your payment phone number first.");
                     return;
                   }
+                  if (!pdfProofUrl) {
+                    alert("Please upload a screenshot of your payment receipt first.");
+                    return;
+                  }
                   
                   setIsSubmitAccessLoading(true);
                   window.showPowerCodeLoader?.("Processing Payment...");
@@ -4298,14 +4451,15 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
                         amountPaid: 15000,
                         paymentMethod,
                         phone: paymentPhone,
-                        proofUrl: `https://dummyimage.com/600x800/ff7b00/ffffff&text=RECEIPT+${paymentMethod}+Powercode+${Math.floor(100000+Math.random()*900000)}`
+                        proofUrl: pdfProofUrl
                       })
                     });
                     const resJson = await response.json();
                     if (resJson.success) {
-                      alert("💸 Your payment transaction has been transmitted to admins successfully!\n\nOnce our finance team verifies the transaction, this book will instantly unlock for you.");
+                      alert("💸 Your payment transaction and screenshot proof have been transmitted to admins successfully!\n\nOnce our finance team verifies the screenshot, this book will instantly unlock for you.");
                       setPurchasePdfItem(null);
                       setPaymentPhone("");
+                      setPdfProofUrl("");
                       fetchAllData();
                     } else {
                       alert(resJson.error || "Something failed transmitting proof details.");
@@ -4331,6 +4485,64 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
                     className="w-full bg-[#0d1117] border border-[#30363d] text-white py-2 px-3.5 rounded-xl text-xs outline-none focus:border-[#ff7b00] font-mono placeholder:text-gray-600"
                   />
                   <p className="text-[10px] text-gray-500 font-mono mt-1">Our finance department maps transactions against the sender phone log history.</p>
+                </div>
+
+                {/* Real Payment Receipt Screenshot Upload Block */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-400 block uppercase tracking-wider font-mono">
+                    Upload Payment Screenshot <span className="text-red-500">*</span>
+                  </label>
+                  
+                  {!pdfProofUrl ? (
+                    <div className="relative border-2 border-dashed border-[#ff7b00]/30 hover:border-[#ff7b00]/60 bg-[#0d1117] rounded-xl p-4 text-center cursor-pointer transition-colors group">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => handlePaymentScreenshotUpload(e, "pdf")}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                      />
+                      <div className="space-y-1.5 pointer-events-none">
+                        {pdfProofUploading ? (
+                          <div className="flex flex-col items-center justify-center space-y-2">
+                            <div className="w-6 h-6 border-2 border-[#ff7b00] border-t-transparent rounded-full animate-spin" />
+                            <span className="text-xs text-gray-400 font-mono">Uploading screenshot...</span>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="w-10 h-10 rounded-full bg-[#ff7b00]/10 flex items-center justify-center text-[#ff7b00] mx-auto group-hover:scale-105 transition-transform">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                            </div>
+                            <p className="text-xs font-bold text-gray-300">Click to upload payment screenshot</p>
+                            <p className="text-[10px] text-gray-500 font-mono">JPG, PNG, WebP up to 10MB</p>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="relative bg-[#0d1117] border border-[#ff7b00]/30 rounded-xl p-3 flex items-center gap-3">
+                      <img 
+                        src={pdfProofUrl} 
+                        alt="Payment Proof Receipt" 
+                        className="w-12 h-16 object-cover rounded border border-[#30363d]"
+                        referrerPolicy="no-referrer"
+                      />
+                      <div className="flex-1 min-w-0 text-left">
+                        <p className="text-xs font-bold text-emerald-400 flex items-center gap-1">
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Receipt Captured</span>
+                        </p>
+                        <p className="text-[10px] text-gray-400 truncate font-mono">File path uploaded securely</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setPdfProofUrl("")}
+                        className="p-1.5 rounded bg-[#21262d] text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                        title="Remove uploaded image"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="bg-[#21262d]/40 rounded-xl p-3 flex items-start gap-2 border border-[#30363d]/50">
@@ -4466,6 +4678,10 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
                     alert("Please input your payment phone number first.");
                     return;
                   }
+                  if (!courseProofUrl) {
+                    alert("Please upload a screenshot of your payment receipt first.");
+                    return;
+                  }
                   
                   setIsSubmitAccessLoading(true);
                   try {
@@ -4482,14 +4698,15 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
                         amountPaid: purchaseCourseItem.price || 49,
                         paymentMethod,
                         phone: paymentPhone,
-                        proofUrl: `https://dummyimage.com/600x800/ff7b00/ffffff&text=RECEIPT+${paymentMethod}+Powercode+${Math.floor(100000+Math.random()*900000)}`
+                        proofUrl: courseProofUrl
                       })
                     });
                     const resJson = await response.json();
                     if (resJson.success) {
-                      alert("💸 Your course payment transaction has been transmitted to admins successfully!\n\nOnce our finance team verifies the transaction, this premium course will instantly unlock for you.");
+                      alert("💸 Your course payment transaction and screenshot proof have been transmitted to admins successfully!\n\nOnce our finance team verifies the screenshot, this premium course will instantly unlock for you.");
                       setPurchaseCourseItem(null);
                       setPaymentPhone("");
+                      setCourseProofUrl("");
                       fetchAllData();
                     } else {
                       alert(resJson.error || "Something failed transmitting proof details.");
@@ -4513,6 +4730,64 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
                     className="w-full bg-[#0d1117] border border-[#30363d] text-white py-2 px-3.5 rounded-xl text-xs outline-none focus:border-[#ff7b00] font-mono placeholder:text-gray-600"
                   />
                   <p className="text-[10px] text-gray-500 font-mono mt-1">Our finance department maps transactions against the sender phone log history.</p>
+                </div>
+
+                {/* Real Payment Receipt Screenshot Upload Block */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-400 block uppercase tracking-wider font-mono">
+                    Upload Payment Screenshot <span className="text-red-500">*</span>
+                  </label>
+                  
+                  {!courseProofUrl ? (
+                    <div className="relative border-2 border-dashed border-[#ff7b00]/30 hover:border-[#ff7b00]/60 bg-[#0d1117] rounded-xl p-4 text-center cursor-pointer transition-colors group">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => handlePaymentScreenshotUpload(e, "course")}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                      />
+                      <div className="space-y-1.5 pointer-events-none">
+                        {courseProofUploading ? (
+                          <div className="flex flex-col items-center justify-center space-y-2">
+                            <div className="w-6 h-6 border-2 border-[#ff7b00] border-t-transparent rounded-full animate-spin" />
+                            <span className="text-xs text-gray-400 font-mono">Uploading screenshot...</span>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="w-10 h-10 rounded-full bg-[#ff7b00]/10 flex items-center justify-center text-[#ff7b00] mx-auto group-hover:scale-105 transition-transform">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                            </div>
+                            <p className="text-xs font-bold text-gray-300">Click to upload payment screenshot</p>
+                            <p className="text-[10px] text-gray-500 font-mono">JPG, PNG, WebP up to 10MB</p>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="relative bg-[#0d1117] border border-[#ff7b00]/30 rounded-xl p-3 flex items-center gap-3">
+                      <img 
+                        src={courseProofUrl} 
+                        alt="Payment Proof Receipt" 
+                        className="w-12 h-16 object-cover rounded border border-[#30363d]"
+                        referrerPolicy="no-referrer"
+                      />
+                      <div className="flex-1 min-w-0 text-left">
+                        <p className="text-xs font-bold text-emerald-400 flex items-center gap-1">
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Receipt Captured</span>
+                        </p>
+                        <p className="text-[10px] text-gray-400 truncate font-mono">File path uploaded securely</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setCourseProofUrl("")}
+                        className="p-1.5 rounded bg-[#21262d] text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                        title="Remove uploaded image"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="bg-[#21262d]/40 rounded-xl p-3 flex items-start gap-2 border border-[#30363d]/50">
@@ -4542,6 +4817,50 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
                   </button>
                 </div>
               </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Dynamic PWA Get App Responsive Install Notification */}
+      {showInstallPrompt && (
+        <div className="fixed bottom-6 right-6 z-50 max-w-sm bg-[#161b22] border border-[#ff7b00] p-4 rounded-xl shadow-2xl animate-fade-in" id="install-app-notification-prompt">
+          <div className="flex gap-3">
+            <div className="p-2 bg-[#ff7b00]/10 rounded-lg h-fit">
+              <Download className="w-5 h-5 text-[#ff7b00] animate-bounce" />
+            </div>
+            <div className="space-y-2 text-left">
+              <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                Get Powercode Academy App
+              </h4>
+              <p className="text-xs text-slate-300 leading-relaxed font-sans">
+                {window.innerWidth < 768 
+                  ? "Get PowerCode Academy Mobile App for your mobile device. Click confirm to install and start offline classes!"
+                  : "Get PowerCode Academy Desktop App for your desktop computer. Click confirm to install and launch offline workspaces!"}
+              </p>
+              <div className="flex gap-2 justify-end pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    localStorage.setItem("powercode_install_prompt_dismissed_v2", "true");
+                    setShowInstallPrompt(false);
+                  }}
+                  className="px-2.5 py-1 text-[10px] font-bold text-gray-400 hover:text-white uppercase transition-colors font-mono cursor-pointer"
+                >
+                  Reject
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    localStorage.setItem("powercode_install_prompt_dismissed_v2", "true");
+                    setShowInstallPrompt(false);
+                    handleInstallApp(window.innerWidth < 768 ? "mobile" : "desktop");
+                  }}
+                  className="px-3 py-1 bg-[#ff7b00] hover:bg-[#e66f00] text-white text-[10px] font-bold rounded-lg uppercase transition-all shadow font-mono cursor-pointer"
+                >
+                  Confirm
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -4646,11 +4965,11 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
               {/* Payment Instructions & Number */}
               <div className="bg-[#21262d] border border-[#30363d] rounded-xl p-3.5 space-y-1.5">
                 <p className="text-xs text-slate-300 leading-relaxed">
-                  Send <strong>UGX 100,000</strong> on our official hotline telephone:
+                  Send <strong>RWF 25,000 / $25</strong> on our official hotline telephone:
                 </p>
                 <div className="bg-[#0d1117] rounded-lg p-2.5 flex items-center justify-between border border-[#30363d]">
-                  <span className="font-mono text-xs font-extrabold text-white text-lg tracking-wider">+256 788 021 341</span>
-                  <span className="text-[10px] text-gray-500 font-bold uppercase font-mono">(KABASA ROBERT)</span>
+                  <span className="font-mono text-xs font-extrabold text-white text-base tracking-wider">+250 796 599 461</span>
+                  <span className="text-[10px] text-amber-400 font-bold uppercase font-mono">(ARCENE IRAKOZE)</span>
                 </div>
               </div>
 
@@ -4658,7 +4977,14 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
               <form
                 onSubmit={async (e) => {
                   e.preventDefault();
-                  if (!paymentPhone) return;
+                  if (!paymentPhone.trim()) {
+                    alert("Please input your payment phone number first.");
+                    return;
+                  }
+                  if (!proProofUrl) {
+                    alert("Please upload a screenshot of your payment receipt first.");
+                    return;
+                  }
 
                   setIsSubmitAccessLoading(true);
                   try {
@@ -4671,14 +4997,16 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
                       body: JSON.stringify({
                         phone: paymentPhone,
                         paymentMethod: paymentMethod,
-                        amount: 100000
+                        amount: 25000,
+                        proofUrl: proProofUrl
                       })
                     });
                     const resJson = await response.json();
                     if (resJson.success) {
-                      alert("💸 Your Pro Upgrade request has been logged successfully!\n\nOur validation team will instantly activate your ELITE PRO access within 10-15 minutes once verified.");
+                      alert("💸 Your Pro Upgrade request and screenshot proof have been logged successfully!\n\nOur validation team will instantly activate your ELITE PRO access within 10-15 minutes once verified.");
                       setShowProModal(false);
                       setPaymentPhone("");
+                      setProProofUrl("");
                       fetchAllData();
                     } else {
                       alert(resJson.error || "Something failed transmitting Pro request.");
@@ -4697,10 +5025,68 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
                     type="text"
                     value={paymentPhone}
                     onChange={(e) => setPaymentPhone(e.target.value)}
-                    placeholder="e.g. +256 788 123 456"
+                    placeholder="e.g. +250 796 599 461"
                     required
                     className="w-full bg-[#0d1117] border border-[#30363d] text-white py-2 px-3.5 rounded-xl text-xs outline-none focus:border-[#ff7b00] font-mono placeholder:text-gray-600"
                   />
+                </div>
+
+                {/* Real Payment Receipt Screenshot Upload Block */}
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-gray-400 block uppercase tracking-wider font-mono">
+                    Upload Payment Screenshot <span className="text-red-500">*</span>
+                  </label>
+                  
+                  {!proProofUrl ? (
+                    <div className="relative border-2 border-dashed border-[#ff7b00]/30 hover:border-[#ff7b00]/60 bg-[#0d1117] rounded-xl p-4 text-center cursor-pointer transition-colors group">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => handlePaymentScreenshotUpload(e, "pro")}
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                      />
+                      <div className="space-y-1.5 pointer-events-none">
+                        {proProofUploading ? (
+                          <div className="flex flex-col items-center justify-center space-y-2">
+                            <div className="w-6 h-6 border-2 border-[#ff7b00] border-t-transparent rounded-full animate-spin" />
+                            <span className="text-xs text-gray-400 font-mono">Uploading screenshot...</span>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="w-10 h-10 rounded-full bg-[#ff7b00]/10 flex items-center justify-center text-[#ff7b00] mx-auto group-hover:scale-105 transition-transform">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                            </div>
+                            <p className="text-xs font-bold text-gray-300">Click to upload payment screenshot</p>
+                            <p className="text-[10px] text-gray-500 font-mono">JPG, PNG, WebP up to 10MB</p>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="relative bg-[#0d1117] border border-[#ff7b00]/30 rounded-xl p-3 flex items-center gap-3">
+                      <img 
+                        src={proProofUrl} 
+                        alt="Payment Proof Receipt" 
+                        className="w-12 h-16 object-cover rounded border border-[#30363d]"
+                        referrerPolicy="no-referrer"
+                      />
+                      <div className="flex-1 min-w-0 text-left">
+                        <p className="text-xs font-bold text-emerald-400 flex items-center gap-1">
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Receipt Captured</span>
+                        </p>
+                        <p className="text-[10px] text-gray-400 truncate font-mono">File path uploaded securely</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setProProofUrl("")}
+                        className="p-1.5 rounded bg-[#21262d] text-gray-400 hover:text-red-400 hover:bg-red-500/10 transition-colors"
+                        title="Remove uploaded image"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex gap-3 justify-end pt-2">

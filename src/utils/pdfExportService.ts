@@ -558,5 +558,22 @@ export const pdfExportService = {
     const doc = compileAnnouncementToDoc(ann);
     doc.save(`PowerCode_Announcement_${ann.id || "Official"}.pdf`);
   },
+  downloadPersonalNotes(lessonTitle: string, notesContent: string) {
+    const doc = new jsPDF({ format: "a4", unit: "mm" });
+    drawPageDecorations(doc, "My Personal Study Notes");
+
+    let y = 38;
+    doc.setTextColor(13, 17, 23);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    y = addWrappedParagraph(doc, `Study Notes: ${lessonTitle}`, 14, y, 180, 8);
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.setTextColor(60, 60, 60);
+    y = addWrappedParagraph(doc, notesContent || "No study notes drafted yet for this lesson. Use the side-panel notebook to write custom comments, guidelines or shortcuts.", 14, y, 180, 5.5);
+
+    doc.save(`PowerCode_MyNotes_${lessonTitle.replace(/\s+/g, "_")}.pdf`);
+  },
   exportSelectedItemsToPdf
 };

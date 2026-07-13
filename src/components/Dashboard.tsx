@@ -19,7 +19,7 @@ interface DashboardProps {
   onRefreshData?: () => void;
 }
 
-type AdminTab = "stats" | "courses" | "tutorials" | "pdfs" | "challenges" | "quizzes" | "certificates" | "announcements" | "paths" | "settings" | "purchases" | "trash" | "logs" | "sounds" | "transactions" | "media" | "users";
+type AdminTab = "stats" | "courses" | "tutorials" | "pdfs" | "challenges" | "quizzes" | "certificates" | "announcements" | "paths" | "settings" | "purchases" | "trash" | "logs" | "sounds" | "transactions" | "media" | "users" | "messages";
 
 export default function Dashboard({ user, onViewCertificate, coursesList, onEnrollCourse, t, onUpdateUser, triggerToast, onRefreshData }: DashboardProps) {
   const isAdmin = user.role === "ADMIN";
@@ -106,6 +106,13 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
   const [adminTransactions, setAdminTransactions] = useState<any[]>([]);
   const [txFilterQuery, setTxFilterQuery] = useState<string>("");
   const [txFilterStatus, setTxFilterStatus] = useState<string>("ALL");
+
+  // Support Tickets Ticketing Portal State
+  const [supportTickets, setSupportTickets] = useState<any[]>([]);
+  const [ticketSubject, setTicketSubject] = useState<string>("");
+  const [ticketMessage, setTicketMessage] = useState<string>("");
+  const [adminReplyTexts, setAdminReplyTexts] = useState<{ [ticketId: number]: string }>({});
+  const [isSubmittingTicket, setIsSubmittingTicket] = useState<boolean>(false);
 
   // FILE UPLOAD AND SIMULATION HELPER
   const [uploadProgress, setUploadProgress] = useState<string>("");
@@ -365,6 +372,14 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
         if (studentPayments && Array.isArray(studentPayments.requests)) {
           setStudentPaymentRequestsList(studentPayments.requests);
         }
+      }
+
+      // Load Support Messages / Support Tickets
+      const ticketsData = await safeFetchJson("/api/support-messages", {
+        headers: { "Authorization": `Bearer ${user.email}` }
+      });
+      if (ticketsData.success && Array.isArray(ticketsData.messages)) {
+        setSupportTickets(ticketsData.messages);
       }
 
     } catch (e) {
@@ -1253,7 +1268,7 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
           
           {/* Collapsible/Tab navigation rows for Admin panel */}
           <div className="flex flex-wrap gap-1.5 border-b border-[#30363d] pb-3" id="admin-tabs">
-            {(["stats", "courses", "tutorials", "pdfs", "challenges", "quizzes", "certificates", "announcements", "paths", "settings", "purchases", "sounds", "media", "transactions", "trash", "logs", "users"] as AdminTab[]).map((tab) => (
+            {(["stats", "courses", "tutorials", "pdfs", "challenges", "quizzes", "certificates", "announcements", "paths", "settings", "purchases", "sounds", "media", "transactions", "trash", "logs", "users", "messages"] as AdminTab[]).map((tab) => (
               <button
                 key={tab}
                 onClick={() => { setActiveAdminTab(tab); setFeedback(""); }}
@@ -1264,7 +1279,7 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
                 }`}
                 id={`admin-tab-trigger-${tab}`}
               >
-                {tab === "pdfs" ? "PDF Books" : tab === "paths" ? "Learning Paths" : tab === "trash" ? "Trash Bin" : tab === "logs" ? "Activity Logs" : tab === "purchases" ? "MoMo Purchases" : tab === "sounds" ? "Notification Sounds" : tab === "transactions" ? "Transaction History" : tab === "media" ? "Content Media Manager" : tab === "users" ? "Manage Users" : tab}
+                {tab === "pdfs" ? "PDF Books" : tab === "paths" ? "Learning Paths" : tab === "trash" ? "Trash Bin" : tab === "logs" ? "Activity Logs" : tab === "purchases" ? "MoMo Purchases" : tab === "sounds" ? "Notification Sounds" : tab === "transactions" ? "Transaction History" : tab === "media" ? "Content Media Manager" : tab === "users" ? "Manage Users" : tab === "messages" ? "Support Messages" : tab}
               </button>
             ))}
           </div>
@@ -3828,6 +3843,112 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
             </div>
           )}
 
+          {/* TAB: SECURE INCOMING STUDENT SUPPORT MESSAGES */}
+          {activeAdminTab === "messages" && (
+            <div className="bg-[#161b22] border border-[#30363d] p-5 rounded-2xl space-y-4 font-sans animate-fade-in" id="admin-messages-tab">
+              <div className="border-b border-[#30363d] pb-3 bg-[#0d1117]/30 p-3 rounded-xl border border-[#21262d] mb-4">
+                <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                  <HelpCircle className="w-4 h-4 text-[#ff7b00]" />
+                  <span>INCOMING SUPPORT TICKETS DESK</span>
+                </h4>
+                <p className="text-[11px] text-gray-400 mt-0.5">Read incoming ticket queries and reply directly. Students will receive real-time inbox alerts instantly.</p>
+              </div>
+
+              {supportTickets.length === 0 ? (
+                <div className="text-center py-12 text-gray-500 text-xs italic font-mono">
+                  No student support tickets have been submitted yet.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {supportTickets.map((ticket: any) => {
+                    const replyText = adminReplyTexts[ticket.id] || "";
+                    return (
+                      <div key={ticket.id} className="p-4 bg-[#0d1117] rounded-xl border border-[#21262d] space-y-3 text-left animate-fade-in">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-[#21262d] pb-2">
+                          <div>
+                            <span className="text-xs font-bold text-white">{ticket.subject}</span>
+                            <div className="text-[10px] text-gray-500 font-mono mt-0.5 flex items-center gap-2">
+                              <span className="text-[#ff7b00] font-bold">{ticket.userName}</span>
+                              <span>({ticket.userEmail})</span>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-[9px] text-gray-400 block font-mono">{new Date(ticket.createdAt).toLocaleString()}</span>
+                            <span className={`inline-block text-[9px] font-bold font-mono px-1.5 py-0.5 rounded mt-1 ${
+                              ticket.replyMessage 
+                                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20" 
+                                : "bg-amber-500/10 text-amber-400 border border-amber-500/20 animate-pulse"
+                            }`}>
+                              {ticket.replyMessage ? "REPLIED" : "AWAITING REPLY"}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="bg-[#161b22] p-3 rounded-lg border border-[#30363d]/50">
+                          <p className="text-xs text-gray-200 leading-relaxed whitespace-pre-wrap">{ticket.message}</p>
+                        </div>
+
+                        {ticket.replyMessage ? (
+                          <div className="bg-emerald-950/20 border border-emerald-500/20 p-3 rounded-lg space-y-1">
+                            <span className="text-[10px] text-emerald-400 font-bold uppercase font-mono">My Answer (Delivered):</span>
+                            <p className="text-xs text-emerald-100 leading-relaxed">{ticket.replyMessage}</p>
+                            {ticket.repliedAt && (
+                              <p className="text-[9px] text-gray-500 text-right font-mono">Replied on: {new Date(ticket.repliedAt).toLocaleString()}</p>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="space-y-2 pt-1">
+                            <textarea
+                              rows={2}
+                              value={replyText}
+                              onChange={(e) => setAdminReplyTexts(prev => ({ ...prev, [ticket.id]: e.target.value }))}
+                              placeholder="Type your official helpdesk reply message here..."
+                              className="w-full bg-[#161b22] border border-[#30363d] text-white py-1.5 px-3 rounded-lg text-xs outline-none focus:border-[#ff7b00] font-mono resize-none"
+                            />
+                            <div className="flex justify-end">
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  if (!replyText.trim()) {
+                                    alert("Please write a reply message first.");
+                                    return;
+                                  }
+                                  try {
+                                    const res = await fetch(`/api/support-messages/${ticket.id}/reply`, {
+                                      method: "POST",
+                                      headers: {
+                                        "Content-Type": "application/json",
+                                        "Authorization": `Bearer ${user.email}`
+                                      },
+                                      body: JSON.stringify({ replyMessage: replyText })
+                                    });
+                                    const data = await res.json();
+                                    if (data.success) {
+                                      alert("✉️ Support reply transmitted successfully to student!");
+                                      setAdminReplyTexts(prev => ({ ...prev, [ticket.id]: "" }));
+                                      loadPlatformData();
+                                    } else {
+                                      alert(data.error || "Failed sending response reply.");
+                                    }
+                                  } catch (err: any) {
+                                    alert("Connection error: " + err.message);
+                                  }
+                                }}
+                                className="bg-[#ff7b00] hover:bg-[#e66f00] text-white text-[11px] font-bold py-1.5 px-4 rounded-lg transition-colors flex items-center gap-1 font-mono"
+                              >
+                                Send Reply Message
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
+
         </div>
       ) : (
         /* =========================================================================
@@ -4479,6 +4600,145 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          {/* Direct Support & Helpdesk Tickets */}
+          <div className="bg-[#161b22] border border-[#30363d] rounded-2xl p-5 space-y-4" id="student-support-portal">
+            <div className="flex items-center gap-2">
+              <HelpCircle className="text-[#ff7b00] w-5 h-5 animate-pulse" />
+              <div>
+                <h3 className="text-sm font-bold text-white uppercase">Personal Helpdesk & Tickets</h3>
+                <p className="text-[11px] text-gray-500">Need expert assistance? Submit a direct ticket message and Arcene will reply within 10 minutes!</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Form to submit a new ticket */}
+              <form 
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  if (!ticketSubject.trim() || !ticketMessage.trim()) {
+                    alert("Please fill in all ticket details first.");
+                    return;
+                  }
+                  setIsSubmittingTicket(true);
+                  try {
+                    const res = await fetch("/api/support-messages", {
+                      method: "POST",
+                      headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${user.email}`
+                      },
+                      body: JSON.stringify({
+                        subject: ticketSubject,
+                        message: ticketMessage
+                      })
+                    });
+                    const data = await res.json();
+                    if (data.success) {
+                      alert("✉️ Ticket transmitted successfully! The admin team has been notified.");
+                      setTicketSubject("");
+                      setTicketMessage("");
+                      // Reload platform support messages
+                      loadPlatformData();
+                    } else {
+                      alert(data.error || "Failed to submit ticket.");
+                    }
+                  } catch (err: any) {
+                    alert("Error connecting to helpdesk: " + err.message);
+                  } finally {
+                    setIsSubmittingTicket(false);
+                  }
+                }}
+                className="space-y-3 bg-[#0d1117] p-4 rounded-xl border border-[#21262d]"
+              >
+                <h4 className="text-xs font-bold text-white uppercase tracking-wider font-mono">Create New Ticket</h4>
+                
+                <div>
+                  <label className="block text-[10px] text-gray-400 font-mono mb-1">Subject / Question Type</label>
+                  <input
+                    type="text"
+                    value={ticketSubject}
+                    onChange={(e) => setTicketSubject(e.target.value)}
+                    placeholder="e.g. Help with premium lecture video player"
+                    required
+                    className="w-full bg-[#161b22] border border-[#30363d] text-white py-1.5 px-3 rounded-lg text-xs outline-none focus:border-[#ff7b00] font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] text-gray-400 font-mono mb-1">Detailed Message Description</label>
+                  <textarea
+                    rows={4}
+                    value={ticketMessage}
+                    onChange={(e) => setTicketMessage(e.target.value)}
+                    placeholder="Provide a detailed explanation. Arcene will reply directly here."
+                    required
+                    className="w-full bg-[#161b22] border border-[#30363d] text-white py-1.5 px-3 rounded-lg text-xs outline-none focus:border-[#ff7b00] font-mono resize-none"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  disabled={isSubmittingTicket}
+                  className="w-full bg-[#ff7b00] hover:bg-[#e66f00] text-white text-xs font-bold py-2 rounded-lg transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+                >
+                  {isSubmittingTicket ? "Transmitting..." : "Send Secure Message"}
+                </button>
+              </form>
+
+              {/* List of previously sent tickets and replies */}
+              <div className="space-y-3 bg-[#0d1117] p-4 rounded-xl border border-[#21262d] max-h-[340px] overflow-y-auto custom-scrollbar">
+                <h4 className="text-xs font-bold text-white uppercase tracking-wider font-mono flex items-center justify-between">
+                  <span>Your Inbox Conversations ({supportTickets.length})</span>
+                  <span className="text-[10px] text-[#ff7b00] lowercase font-normal font-mono">verified secure SSL socket</span>
+                </h4>
+
+                {supportTickets.length === 0 ? (
+                  <div className="text-center py-10 text-gray-500 text-xs italic font-mono">
+                    No active ticket conversations. Need assistance? Send a message on the left!
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {supportTickets.map((ticket: any) => (
+                      <div key={ticket.id} className="p-3 bg-[#161b22] border border-[#21262d] rounded-lg space-y-2 text-left">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-bold text-white">{ticket.subject}</span>
+                          <span className="text-[9px] text-gray-500 font-mono">
+                            {new Date(ticket.createdAt).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-gray-300 font-sans leading-relaxed pl-1.5 border-l-2 border-[#ff7b00]/40">
+                          {ticket.message}
+                        </p>
+
+                        {ticket.replyMessage ? (
+                          <div className="mt-2.5 p-2 bg-[#21262d]/50 rounded border border-[#30363d] space-y-1">
+                            <div className="flex items-center gap-1 text-[10px] text-[#ff7b00] font-bold uppercase font-mono">
+                              <span className="w-1.5 h-1.5 rounded-full bg-[#ff7b00]" />
+                              <span>Response from Arcene Irakoze:</span>
+                            </div>
+                            <p className="text-[10.5px] text-gray-200 font-sans leading-relaxed">
+                              {ticket.replyMessage}
+                            </p>
+                            {ticket.repliedAt && (
+                              <p className="text-[9px] text-right text-gray-500 font-mono">
+                                Replied at: {new Date(ticket.repliedAt).toLocaleTimeString()}
+                              </p>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-[9.5px] text-amber-500 font-mono italic flex items-center gap-1 mt-1 bg-amber-500/5 px-2 py-1 rounded border border-amber-500/10">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
+                            <span>Awaiting validation review... (typically 10 mins)</span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 

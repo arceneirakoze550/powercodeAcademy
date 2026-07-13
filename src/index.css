@@ -170,3 +170,157 @@ body.light-mode .bg-green-500\/10 {
   color: #1a7f37 !important;
 }
 
+/* Custom Multi-Theme Specific Overrides */
+
+/* --- BLUE & WHITE (Light Theme with Blue Accents) --- */
+body.theme-blue-white {
+  background-color: #f8fafc !important;
+  color: #0f172a !important;
+}
+body.theme-blue-white .bg-\[\#0d1117\],
+body.theme-blue-white .bg-black {
+  background-color: #f1f5f9 !important;
+  color: #0f172a !important;
+}
+body.theme-blue-white .bg-\[\#161b22\],
+body.theme-blue-white .bg-\[\#21262d\],
+body.theme-blue-white .bg-[#21262d] {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+}
+body.theme-blue-white .border-\[\#30363d\],
+body.theme-blue-white .border-[#30363d],
+body.theme-blue-white .border-\[\#21262d\],
+body.theme-blue-white .border-[#21262d] {
+  border-color: #cbd5e1 !important;
+}
+body.theme-blue-white .text-\[\#ff7b00\],
+body.theme-blue-white .text-orange-400 {
+  color: #2563eb !important; /* Royal Blue */
+}
+body.theme-blue-white .bg-\[\#ff7b00\],
+body.theme-blue-white .bg-orange-500 {
+  background-color: #2563eb !important;
+}
+body.theme-blue-white .hover\:bg-\[\#e66f00\]:hover,
+body.theme-blue-white .hover\:bg-orange-600:hover {
+  background-color: #1d4ed8 !important;
+}
+
+/* --- GREEN & WHITE (Light Theme with Green Accents) --- */
+body.theme-green-white {
+  background-color: #f9fbf9 !important;
+  color: #14532d !important;
+}
+body.theme-green-white .bg-\[\#0d1117\],
+body.theme-green-white .bg-black {
+  background-color: #f0fdf4 !important;
+  color: #14532d !important;
+}
+body.theme-green-white .bg-\[\#161b22\],
+body.theme-green-white .bg-\[\#21262d\],
+body.theme-green-white .bg-[#21262d] {
+  background-color: #ffffff !important;
+  color: #14532d !important;
+}
+body.theme-green-white .border-\[\#30363d\],
+body.theme-green-white .border-[#30363d],
+body.theme-green-white .border-\[\#21262d\],
+body.theme-green-white .border-[#21262d] {
+  border-color: #bbf7d0 !important;
+}
+body.theme-green-white .text-\[\#ff7b00\],
+body.theme-green-white .text-orange-400 {
+  color: #16a34a !important; /* Emerald Green */
+}
+body.theme-green-white .bg-\[\#ff7b00\],
+body.theme-green-white .bg-orange-500 {
+  background-color: #16a34a !important;
+}
+body.theme-green-white .hover\:bg-\[\#e66f00\]:hover,
+body.theme-green-white .hover\:bg-orange-600:hover {
+  background-color: #15803d !important;
+}
+
+/* --- MIDNIGHT DEEP (Navy Blue Dark Theme) --- */
+body.theme-dark-blue {
+  background-color: #0b0f19 !important;
+  color: #cbd5e1 !important;
+}
+body.theme-dark-blue #classroom-workspace,
+body.theme-dark-blue #view-dashboard,
+body.theme-dark-blue #view-courses,
+body.theme-dark-blue #view-tutorials,
+body.theme-dark-blue #view-pdfs,
+body.theme-dark-blue #view-quizzes,
+body.theme-dark-blue #view-challenges,
+body.theme-dark-blue #view-community,
+body.theme-dark-blue #landing-page-hero,
+body.theme-dark-blue .bg-\[\#0d1117\] {
+  background-color: #0b0f19 !important;
+}
+body.theme-dark-blue .bg-\[\#161b22\],
+body.theme-dark-blue .bg-\[\#21262d\],
+body.theme-dark-blue .bg-[#21262d] {
+  background-color: #111827 !important;
+}
+body.theme-dark-blue .border-\[\#30363d\],
+body.theme-dark-blue .border-[#30363d],
+body.theme-dark-blue .border-\[\#21262d\],
+body.theme-dark-blue .border-[#21262d] {
+  border-color: #1f2937 !important;
+}
+body.theme-dark-blue .text-\[\#ff7b00\],
+body.theme-dark-blue .text-orange-400 {
+  color: #3b82f6 !important; /* Bright Blue */
+}
+body.theme-dark-blue .bg-\[\#ff7b00\],
+body.theme-dark-blue .bg-orange-500 {
+  background-color: #3b82f6 !important;
+}
+body.theme-dark-blue .hover\:bg-\[\#e66f00\]:hover,
+body.theme-dark-blue .hover\:bg-orange-600:hover {
+  background-color: #2563eb !important;
+}
+
+/* --- FOREST EMERALD (Greenish Dark Theme) --- */
+body.theme-dark-green {
+  background-color: #04120e !important;
+  color: #cbd5e1 !important;
+}
+body.theme-dark-green #classroom-workspace,
+body.theme-dark-green #view-dashboard,
+body.theme-dark-green #view-courses,
+body.theme-dark-green #view-tutorials,
+body.theme-dark-green #view-pdfs,
+body.theme-dark-green #view-quizzes,
+body.theme-dark-green #view-challenges,
+body.theme-dark-green #view-community,
+body.theme-dark-green #landing-page-hero,
+body.theme-dark-green .bg-\[\#0d1117\] {
+  background-color: #04120e !important;
+}
+body.theme-dark-green .bg-\[\#161b22\],
+body.theme-dark-green .bg-\[\#21262d\],
+body.theme-dark-green .bg-[#21262d] {
+  background-color: #06241c !important;
+}
+body.theme-dark-green .border-\[\#30363d\],
+body.theme-dark-green .border-[#30363d],
+body.theme-dark-green .border-\[\#21262d\],
+body.theme-dark-green .border-[#21262d] {
+  border-color: #0d3b2e !important;
+}
+body.theme-dark-green .text-\[\#ff7b00\],
+body.theme-dark-green .text-orange-400 {
+  color: #10b981 !important; /* Mint/Emerald Green */
+}
+body.theme-dark-green .bg-\[\#ff7b00\],
+body.theme-dark-green .bg-orange-500 {
+  background-color: #10b981 !important;
+}
+body.theme-dark-green .hover\:bg-\[\#e66f00\]:hover,
+body.theme-dark-green .hover\:bg-orange-600:hover {
+  background-color: #059669 !important;
+}
+

@@ -505,7 +505,8 @@ async function loadDBFromPostgres(): Promise<DbState> {
     notificationReads: [],
     notificationLogs: [],
     pushTokens: [],
-    notificationSounds: []
+    notificationSounds: [],
+    supportMessages: []
   };
 
   if (!pgPool) return db;
@@ -1420,6 +1421,7 @@ interface DbState {
   notificationLogs?: any[];
   pushTokens?: any[];
   notificationSounds?: any[];
+  supportMessages?: any[];
 }
 
 const defaultInitialState: DbState = {
@@ -1751,7 +1753,8 @@ const defaultInitialState: DbState = {
   notificationReads: [],
   notificationLogs: [],
   pushTokens: [],
-  notificationSounds: []
+  notificationSounds: [],
+  supportMessages: []
 };
 
 // State Helper Functions
@@ -1797,7 +1800,8 @@ function ensureDbSanitized(parsed: any): DbState {
     "notificationReads",
     "notificationLogs",
     "pushTokens",
-    "notificationSounds"
+    "notificationSounds",
+    "supportMessages"
   ];
 
   arrayKeys.forEach((key) => {
@@ -4047,6 +4051,87 @@ app.put("/api/announcements/:id", (req, res) => {
 
   saveDB(db);
   res.json({ announcement: db.announcements[idx] });
+});
+
+
+// ==========================================
+// STUDENT TICKET SUPPORT & ADMIN CONSOLE API
+// ==========================================
+
+// GET ALL SUPPORT MESSAGES
+app.get("/api/support-messages", (req, res) => {
+  const user = parseUserFromAuth(req);
+  if (!user) return res.status(401).json({ error: "Authentication required" });
+
+  const db = getDB();
+  db.supportMessages = db.supportMessages || [];
+
+  if (user.role === "ADMIN") {
+    res.json({ success: true, messages: db.supportMessages });
+  } else {
+    res.json({ success: true, messages: db.supportMessages.filter((m: any) => m.userId === user.id) });
+  }
+});
+
+// SUBMIT NEW SUPPORT MESSAGE
+app.post("/api/support-messages", (req, res) => {
+  const user = parseUserFromAuth(req);
+  if (!user) return res.status(401).json({ error: "Authentication required" });
+
+  const { subject, message } = req.body;
+  if (!subject || !message) {
+    return res.status(400).json({ error: "Missing subject or message contents" });
+  }
+
+  const db = getDB();
+  db.supportMessages = db.supportMessages || [];
+
+  const nextId = db.supportMessages.length ? Math.max(...db.supportMessages.map((m: any) => m.id)) + 1 : 1;
+  const newMsg = {
+    id: nextId,
+    userId: user.id,
+    userName: user.name,
+    userEmail: user.email,
+    subject,
+    message,
+    createdAt: new Date().toISOString()
+  };
+
+  db.supportMessages.push(newMsg);
+  saveDB(db);
+
+  // Notify Admin about new ticket message
+  notifyUser(1, `🆕 New Support Ticket from ${user.name}`, `Subject: ${subject}`, "INFO", "dashboard");
+
+  res.json({ success: true, message: "Support ticket logged successfully!", ticket: newMsg });
+});
+
+// ADMIN REPLY TO SUPPORT MESSAGE
+app.post("/api/support-messages/:id/reply", (req, res) => {
+  const user = parseUserFromAuth(req);
+  if (!user || user.role !== "ADMIN") return res.status(403).json({ error: "Unauthorized access" });
+
+  const { replyMessage } = req.body;
+  if (!replyMessage) {
+    return res.status(400).json({ error: "Reply message body cannot be empty" });
+  }
+
+  const db = getDB();
+  db.supportMessages = db.supportMessages || [];
+
+  const ticketId = parseInt(req.params.id);
+  const ticket = db.supportMessages.find((m: any) => m.id === ticketId);
+  if (!ticket) return res.status(404).json({ error: "Support ticket not found" });
+
+  ticket.replyMessage = replyMessage;
+  ticket.repliedAt = new Date().toISOString();
+
+  saveDB(db);
+
+  // Notify student about admin reply
+  notifyUser(ticket.userId, "✉️ Support Ticket Reply Received", `Your ticket: "${ticket.subject}" has received a reply from the PowerCode Academy Admin.`, "SUCCESS", "dashboard");
+
+  res.json({ success: true, message: "Reply delivered successfully!", ticket });
 });
 
 
