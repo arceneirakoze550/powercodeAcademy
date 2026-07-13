@@ -324,3 +324,70 @@ body.theme-dark-green .hover\:bg-orange-600:hover {
   background-color: #059669 !important;
 }
 
+/* --- UNIVERSAL THEME-AWARE SECONDARY BUTTON --- */
+.btn-secondary {
+  background-color: #21262d;
+  color: #c9d1d9;
+  border: 1px solid #30363d;
+}
+.btn-secondary:hover {
+  background-color: #30363d;
+  color: #ffffff;
+  border-color: #ff7b00;
+}
+
+body.light-mode .btn-secondary {
+  background-color: #ffffff !important;
+  color: #1f2328 !important;
+  border: 1px solid #cbd5e1 !important;
+}
+body.light-mode .btn-secondary:hover {
+  background-color: #eaeef2 !important;
+  color: #1f2328 !important;
+  border-color: #bf4f00 !important;
+}
+
+body.theme-blue-white .btn-secondary {
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  border: 1px solid #cbd5e1 !important;
+}
+body.theme-blue-white .btn-secondary:hover {
+  background-color: #f1f5f9 !important;
+  color: #2563eb !important;
+  border-color: #2563eb !important;
+}
+
+body.theme-green-white .btn-secondary {
+  background-color: #ffffff !important;
+  color: #14532d !important;
+  border: 1px solid #bbf7d0 !important;
+}
+body.theme-green-white .btn-secondary:hover {
+  background-color: #f0fdf4 !important;
+  color: #16a34a !important;
+  border-color: #16a34a !important;
+}
+
+body.theme-dark-blue .btn-secondary {
+  background-color: #111827 !important;
+  color: #cbd5e1 !important;
+  border: 1px solid #1f2937 !important;
+}
+body.theme-dark-blue .btn-secondary:hover {
+  background-color: #1f2937 !important;
+  color: #3b82f6 !important;
+  border-color: #3b82f6 !important;
+}
+
+body.theme-dark-green .btn-secondary {
+  background-color: #06241c !important;
+  color: #cbd5e1 !important;
+  border: 1px solid #0d3b2e !important;
+}
+body.theme-dark-green .btn-secondary:hover {
+  background-color: #0d3b2e !important;
+  color: #10b981 !important;
+  border-color: #10b981 !important;
+}
+

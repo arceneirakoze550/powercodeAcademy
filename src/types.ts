@@ -29,12 +29,14 @@ export interface Lesson {
   deleted_at?: string;
   deleted_by?: string;
   playbackId?: string | null;
+  isCompleted?: boolean;
 }
 
 export interface Module {
   id: number;
   title: string;
   lessons: Lesson[];
+  isCompleted?: boolean;
 }
 
 export interface Course {

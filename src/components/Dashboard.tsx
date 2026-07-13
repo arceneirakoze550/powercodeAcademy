@@ -2,11 +2,13 @@ import React, { useState, useEffect } from "react";
 import { User, Course, Tutorial, PdfBook, Quiz, CodingChallenge, Certificate, Announcement, LearningPath } from "../types";
 import TrashManager from "./TrashManager";
 import ContentMediaManager from "./ContentMediaManager";
-import { Users, BookOpen, FileText, Landmark, Award, ShieldAlert, TrendingUp, Settings, Plus, Flame, Sparkles, BookMarked, Eye, Trash, CheckSquare, Clock, Upload, Film, Edit, HelpCircle, Check, MapPin, Megaphone, Star, ChevronRight, CornerDownRight, DollarSign, Zap } from "lucide-react";
+import { Users, BookOpen, FileText, Landmark, Award, ShieldAlert, TrendingUp, Settings, Plus, Flame, Sparkles, BookMarked, Eye, Trash, CheckSquare, Clock, Upload, Film, Edit, HelpCircle, Check, MapPin, Megaphone, Star, ChevronRight, CornerDownRight, DollarSign, Zap, Palette } from "lucide-react";
+import { useTheme } from "../utils/ThemeContext";
 import { exportSelectedItemsToPdf } from "../utils/pdfService";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from "recharts";
 import CertificateSettings from "./CertificateSettings";
 import { ConfirmDeleteModal } from "./ConfirmDeleteModal";
+import { ModuleProgressBar } from "./ModuleProgressBar";
 
 interface DashboardProps {
   user: User;
@@ -23,6 +25,7 @@ type AdminTab = "stats" | "courses" | "tutorials" | "pdfs" | "challenges" | "qui
 
 export default function Dashboard({ user, onViewCertificate, coursesList, onEnrollCourse, t, onUpdateUser, triggerToast, onRefreshData }: DashboardProps) {
   const isAdmin = user.role === "ADMIN";
+  const { theme, setTheme } = useTheme();
 
   // LOCAL TOAST FALLBACK SYSTEM
   const [localToast, setLocalToast] = useState<{ message: string; type: string } | null>(null);
@@ -4064,16 +4067,12 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
 
                 <div className="space-y-3.5 overflow-y-auto max-h-[350px] pr-1">
                   {coursesList.filter(c => c.isEnrolled).map((c) => (
-                    <div key={c.id} className="p-3.5 bg-[#0d1117] border border-[#21262d] rounded-xl space-y-2.5 text-xs">
-                      <div className="flex justify-between items-start">
-                        <span className="font-bold text-white block capitalize">{c.title}</span>
-                        <span className="font-mono text-[10px] text-orange-400 font-bold bg-orange-500/10 px-2 py-0.5 rounded border border-orange-500/20">{c.progressPercent}% Spec</span>
+                    <div key={c.id} className="p-3.5 bg-[#0d1117] border border-[#21262d] rounded-xl space-y-3 text-xs shadow-md">
+                      <div>
+                        <span className="font-bold text-white block capitalize text-[13px] tracking-tight">{c.title}</span>
                       </div>
                       
-                      {/* Percent bars */}
-                      <div className="w-full bg-[#161b22] rounded-full h-1.5 overflow-hidden">
-                        <div className="bg-[#ff7b00] h-full transition-all" style={{ width: `${c.progressPercent}%` }} />
-                      </div>
+                      <ModuleProgressBar course={c} showDetails={true} />
                     </div>
                   ))}
 
@@ -4487,6 +4486,44 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
                         </button>
                       </div>
 
+                    </div>
+                  </div>
+
+                  {/* Dynamic Color Theme Selector Section */}
+                  <div className="bg-[#0d1117] border border-[#21262d] rounded-xl p-4 space-y-3.5 mt-4" id="user-profile-theme-picker-panel">
+                    <h4 className="text-xs font-bold text-white flex items-center gap-1.5 uppercase font-mono tracking-wide">
+                      <Palette className="w-3.5 h-3.5 text-orange-400" />
+                      Visual Color & Contrast Themes
+                    </h4>
+                    <p className="text-[9.5px] text-gray-500">
+                      Customize your visual workspace layout instantly. Selecting a high-contrast theme helps improve visibility.
+                    </p>
+
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      {[
+                        { code: "dark", label: "🌌 Cosmic Slate" },
+                        { code: "light", label: "💡 Studio Light" },
+                        { code: "blue-white", label: "🟦 Blue/White" },
+                        { code: "green-white", label: "🟩 Green/White" },
+                        { code: "dark-blue", label: "🐳 Midnight" },
+                        { code: "dark-green", label: "🌲 Forest" }
+                      ].map((item) => (
+                        <button
+                          key={item.code}
+                          onClick={() => {
+                            setTheme(item.code as any);
+                            showToast(`Selected theme: ${item.label}`, "success");
+                          }}
+                          type="button"
+                          className={`text-left text-[11px] px-2.5 py-2 rounded-lg flex items-center justify-between font-medium transition-all border cursor-pointer ${
+                            theme === item.code 
+                              ? "bg-[#ff7b00]/10 text-[#ff7b00] border-[#ff7b00] font-bold" 
+                              : "text-slate-300 bg-[#161b22] border-[#30363d] hover:bg-zinc-800"
+                          }`}
+                        >
+                          <span>{item.label}</span>
+                        </button>
+                      ))}
                     </div>
                   </div>
 

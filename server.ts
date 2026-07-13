@@ -986,7 +986,23 @@ async function initPgDatabase() {
       "ALTER TABLE notifications ADD COLUMN IF NOT EXISTS type TEXT;",
       "ALTER TABLE notifications ADD COLUMN IF NOT EXISTS link_tab TEXT;",
       "ALTER TABLE notifications ADD COLUMN IF NOT EXISTS is_read BOOLEAN DEFAULT FALSE;",
-      "ALTER TABLE notifications ADD COLUMN IF NOT EXISTS created_at TEXT;"
+      "ALTER TABLE notifications ADD COLUMN IF NOT EXISTS created_at TEXT;",
+
+      "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS official_signature_url TEXT;",
+      "ALTER TABLE system_settings ADD COLUMN IF NOT EXISTS official_seal_url TEXT;",
+
+      "ALTER TABLE payment_proofs ADD COLUMN IF NOT EXISTS request_id INTEGER;",
+      "ALTER TABLE payment_proofs ADD COLUMN IF NOT EXISTS url TEXT;",
+      "ALTER TABLE payment_proofs ADD COLUMN IF NOT EXISTS uploaded_at TEXT;",
+
+      "ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS user_id INTEGER;",
+      "ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS email_notifications BOOLEAN DEFAULT TRUE;",
+      "ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS push_notifications BOOLEAN DEFAULT TRUE;",
+      "ALTER TABLE notification_settings ADD COLUMN IF NOT EXISTS sound_notifications BOOLEAN DEFAULT TRUE;",
+
+      "ALTER TABLE push_tokens ADD COLUMN IF NOT EXISTS user_id INTEGER;",
+      "ALTER TABLE push_tokens ADD COLUMN IF NOT EXISTS token TEXT;",
+      "ALTER TABLE push_tokens ADD COLUMN IF NOT EXISTS type TEXT;"
     ];
 
     for (const alteration of columnAlterations) {
@@ -1422,6 +1438,15 @@ interface DbState {
   pushTokens?: any[];
   notificationSounds?: any[];
   supportMessages?: any[];
+  directMessages?: {
+    id: number;
+    senderId: number;
+    senderName: string;
+    receiverId: number;
+    receiverName: string;
+    message: string;
+    createdAt: string;
+  }[];
 }
 
 const defaultInitialState: DbState = {
@@ -2029,7 +2054,7 @@ app.post("/api/auth/login", (req, res) => {
 
   if (!user) {
     console.warn(`[Login] Match failed for email: ${cleanEmail}`);
-    return res.status(401).json({ error: "Invalid credentials" });
+    return res.status(401).json({ error: "We couldn't find an account matching that email address. Please double-check your spelling, or sign up to create a new profile." });
   }
 
   // Support both passwordHash and password triggers safely
@@ -2037,7 +2062,7 @@ app.post("/api/auth/login", (req, res) => {
 
   if (userPass !== cleanPassword) {
     console.warn(`[Login] Password mismatch for ${cleanEmail}`);
-    return res.status(401).json({ error: "Invalid credentials" });
+    return res.status(401).json({ error: "Incorrect password. Please verify that your Caps Lock is off and try again, or contact our support team to reset it." });
   }
 
   user.lastActiveAt = new Date().toISOString();
@@ -2171,6 +2196,117 @@ app.delete("/api/users/:id", (req, res) => {
   res.json({ success: true, message: `User "${deletedUser.name}" successfully deleted.` });
 });
 
+// DIRECT MESSAGING & USER SEARCH APIs
+app.get("/api/users/search", (req, res) => {
+  const user = parseUserFromAuth(req);
+  if (!user) {
+    return res.status(401).json({ error: "Authentication required" });
+  }
+
+  const q = String(req.query.q || "").trim().toLowerCase();
+  const db = getDB();
+  const dbUsers = db.users || [];
+
+  if (!q) {
+    // Return first 20 users by default for active discovery
+    const filtered = dbUsers
+      .filter(u => u.id !== user.id)
+      .slice(0, 20)
+      .map(u => ({
+        id: u.id,
+        name: u.name,
+        email: u.email,
+        avatarUrl: u.avatarUrl || u.profile_picture_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100",
+        learningStreak: u.learningStreak || 0
+      }));
+    return res.json({ success: true, users: filtered });
+  }
+
+  const filtered = dbUsers
+    .filter(u => u.id !== user.id && u.name && u.name.toLowerCase().includes(q))
+    .map(u => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      avatarUrl: u.avatarUrl || u.profile_picture_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100",
+      learningStreak: u.learningStreak || 0
+    }));
+
+  res.json({ success: true, users: filtered });
+});
+
+app.get("/api/direct-messages", (req, res) => {
+  const user = parseUserFromAuth(req);
+  if (!user) {
+    return res.status(401).json({ error: "Authentication required" });
+  }
+
+  const db = getDB();
+  db.directMessages = db.directMessages || [];
+
+  const userMessages = db.directMessages.filter(
+    m => m.senderId === user.id || m.receiverId === user.id
+  );
+
+  res.json({ success: true, messages: userMessages });
+});
+
+app.post("/api/direct-messages", (req, res) => {
+  const user = parseUserFromAuth(req);
+  if (!user) {
+    return res.status(401).json({ error: "Authentication required" });
+  }
+
+  const { receiverId, message } = req.body;
+  if (!receiverId || !message || !String(message).trim()) {
+    return res.status(400).json({ error: "Receiver ID and message content are required" });
+  }
+
+  const db = getDB();
+  db.users = db.users || [];
+  const receiverUser = db.users.find(u => u.id === Number(receiverId));
+  if (!receiverUser) {
+    return res.status(404).json({ error: "Recipient user not found" });
+  }
+
+  db.directMessages = db.directMessages || [];
+  const nextId = db.directMessages.length
+    ? Math.max(...db.directMessages.map((m) => m.id)) + 1
+    : 1;
+
+  const newMessage = {
+    id: nextId,
+    senderId: user.id,
+    senderName: user.name,
+    receiverId: receiverUser.id,
+    receiverName: receiverUser.name,
+    message: String(message).trim(),
+    createdAt: new Date().toISOString()
+  };
+
+  db.directMessages.push(newMessage);
+
+  // Send a system notification to the receiver
+  db.notifications = db.notifications || [];
+  const nextNotifId = db.notifications.length
+    ? Math.max(...db.notifications.map((n) => n.id)) + 1
+    : 1;
+
+  db.notifications.push({
+    id: nextNotifId,
+    userId: receiverUser.id,
+    title: `New Message from ${user.name}`,
+    description: String(message).trim().slice(0, 60) + (String(message).length > 60 ? "..." : ""),
+    category: "message",
+    isRead: false,
+    createdAt: new Date().toISOString()
+  });
+
+  saveDB(db);
+
+  res.json({ success: true, message: newMessage });
+});
+
 function getOnlineImageForTitle(title: string): string {
   const t = String(title || "").toLowerCase();
   if (t.includes("react")) {
@@ -2223,14 +2359,29 @@ app.get("/api/courses", (req, res) => {
     // OR if the user is a platform pro, OR if they have direct course purchase.
     const isPlatformPro = user && db.premiumAccess.some(a => a.userId === user.id && a.contentType === "PLATFORM_PRO" && a.status === "ACTIVE");
     const hasAccess = !c.isPremium || (user && (user.role === "ADMIN" || isPlatformPro || db.premiumAccess.some(a => a.userId === user.id && a.contentType === "COURSE" && Number(a.contentId) === c.id && a.status === "ACTIVE")));
+    const mappedModules = (c.modules || []).map((m: any) => {
+      const lessonsWithCompletion = (m.lessons || []).map((l: any) => {
+        return {
+          ...l,
+          isCompleted: user ? progressLessIds.includes(l.id) : false
+        };
+      });
+      const allLessonsCompleted = lessonsWithCompletion.length > 0 && lessonsWithCompletion.every((l: any) => l.isCompleted);
+      return {
+        ...m,
+        lessons: lessonsWithCompletion,
+        isCompleted: allLessonsCompleted
+      };
+    });
     return {
       ...c,
+      modules: mappedModules,
       hasPremiumAccess: !!hasAccess,
       isEnrolled: enrolledCourseIds.includes(c.id),
       progressPercent: enrolledCourseIds.includes(c.id)
         ? Math.round(
-            ((c.modules || []).flatMap(m => m.lessons || []).filter(l => progressLessIds.includes(l.id)).length /
-              Math.max((c.modules || []).flatMap(m => m.lessons || []).length, 1)) *
+            (mappedModules.flatMap(m => m.lessons || []).filter(l => l.isCompleted).length /
+              Math.max(mappedModules.flatMap(m => m.lessons || []).length, 1)) *
               100
           )
         : 0

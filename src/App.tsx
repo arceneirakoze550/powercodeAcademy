@@ -20,6 +20,8 @@ import { io } from "socket.io-client";
 import { SoundManager } from "./lib/audio";
 import LoadingScreen from "./components/LoadingScreen";
 import JSZip from "jszip";
+import { ModuleProgressBar } from "./components/ModuleProgressBar";
+import { DirectChatDrawer } from "./components/DirectChatDrawer";
 
 declare global {
   interface Window {
@@ -627,6 +629,7 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
   const [selectedQuiz, setSelectedQuiz] = useState<Quiz | null>(null);
   const [selectedChallenge, setSelectedChallenge] = useState<CodingChallenge | null>(null);
   const [selectedCertificate, setSelectedCertificate] = useState<Certificate | null>(null);
+  const [directChatOpen, setDirectChatOpen] = useState<boolean>(false);
 
   // Dynamic Content Listing retrieved from backend
   const [courses, setCourses] = useState<Course[]>([]);
@@ -1798,6 +1801,18 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
                 )}
               </div>
 
+              {/* Direct Peer Chat Messenger Trigger */}
+              {user && (
+                <button
+                  onClick={() => setDirectChatOpen(true)}
+                  className="bg-[#21262d] border border-[#30363d] p-2 rounded-lg text-xs text-white hover:border-[#ff7b00] transition-colors cursor-pointer flex items-center justify-center shrink-0 gap-1"
+                  title="Open Peer-to-Peer Direct Chats"
+                >
+                  <MessageSquare className="w-3.5 h-3.5 text-[#ff7b00]" />
+                  <span className="hidden lg:inline text-[10px] font-bold text-gray-300 uppercase">Chat</span>
+                </button>
+              )}
+
               {/* Dynamic Notification Bell with Badge Count */}
               {user && (
                 <div className="relative" id="dynamic-notification-bell-container">
@@ -2072,6 +2087,16 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
                 </div>
               )}
               
+              {/* Quick cycle theme for mobile & tablet */}
+              <button
+                onClick={toggleTheme}
+                className="text-gray-400 hover:text-white p-1.5 rounded-md ml-1 bg-[#21262d] border border-[#30363d] hover:border-[#ff7b00] transition-all cursor-pointer flex items-center justify-center gap-1 shrink-0"
+                aria-label="Toggle visual theme quickly"
+                title={`Cycle Visual Themes (Current: ${theme})`}
+              >
+                <Palette className="w-4 h-4 text-[#ff7b00]" />
+              </button>
+
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                 className="text-gray-400 hover:text-white p-1 rounded-md ml-1"
@@ -2106,6 +2131,15 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
             <button onClick={() => { setActiveTab("challenges"); setMobileMenuOpen(false); }} className="w-full text-left py-2 hover:text-[#ff7b00]">{t("challenges")}</button>
             <button onClick={() => { setActiveTab("ide"); setMobileMenuOpen(false); }} className="w-full text-left py-2 hover:text-[#ff7b00]">{t("ide")}</button>
             <button onClick={() => { setActiveTab("community"); setMobileMenuOpen(false); }} className="w-full text-left py-2 hover:text-[#ff7b00]">{t("community")}</button>
+            {user && (
+              <button 
+                onClick={() => { setDirectChatOpen(true); setMobileMenuOpen(false); }} 
+                className="w-full text-left py-2 hover:text-[#ff7b00] text-[#ff7b00] flex items-center gap-2 font-bold"
+              >
+                <MessageSquare className="w-3.5 h-3.5 text-[#ff7b00]" />
+                <span>DIRECT CHAT ROOM</span>
+              </button>
+            )}
             {user && (
               <button onClick={() => { setActiveTab("dashboard"); setMobileMenuOpen(false); }} className="w-full text-left py-2 hover:text-[#ff7b00] text-[#ff7b00]">
                 {user.role === 'ADMIN' ? t("adminDashboard") : t("studentDashboard")}
@@ -2167,6 +2201,36 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
                   <option key={l.code} value={l.code}>{l.flag} {l.name}</option>
                 ))}
               </select>
+            </div>
+
+            {/* Mobile / Tablet Theme Changing Grid */}
+            <div className="space-y-2.5 pt-2 border-t border-[#30363d] mt-3">
+              <span className="text-[10px] text-gray-500 uppercase tracking-wider block font-bold">Accessibility Theme:</span>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { code: "dark", label: "🌌 Cosmic Slate" },
+                  { code: "light", label: "💡 Studio Light" },
+                  { code: "blue-white", label: "🟦 Blue/White" },
+                  { code: "green-white", label: "🟩 Green/White" },
+                  { code: "dark-blue", label: "🐳 Midnight" },
+                  { code: "dark-green", label: "🌲 Forest" }
+                ].map((item) => (
+                  <button
+                    key={item.code}
+                    onClick={() => {
+                      setTheme(item.code as any);
+                    }}
+                    type="button"
+                    className={`text-left text-[11px] px-2.5 py-2 rounded-lg flex items-center justify-between font-medium transition-all border cursor-pointer ${
+                      theme === item.code 
+                        ? "bg-[#ff7b00]/10 text-[#ff7b00] border-[#ff7b00] font-bold" 
+                        : "text-slate-300 bg-[#21262d] border-[#30363d] hover:bg-zinc-800"
+                    }`}
+                  >
+                    <span>{item.label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         )}
@@ -2394,7 +2458,7 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
                 {!user && (
                   <button
                     onClick={() => setShowRegister(true)}
-                    className="bg-[#21262d] hover:bg-[#30363d] text-white border border-[#30363d] font-bold text-sm py-3 px-8 rounded-xl transition-all cursor-pointer"
+                    className="btn-secondary font-bold text-sm py-3 px-8 rounded-xl transition-all cursor-pointer"
                   >
                     {t("startLearning")}
                   </button>
@@ -2608,7 +2672,12 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
                         <span>{c.modules?.length || 1} Modules</span>
                       </div>
                       <h4 className="text-base font-bold text-white line-clamp-1">{c.title}</h4>
-                      <p className="text-xs text-[#8b949e] line-clamp-3 leading-relaxed">{c.description}</p>
+                      <p className="text-xs text-[#8b949e] line-clamp-3 leading-relaxed mb-3">{c.description}</p>
+                      
+                      {/* Visual Module Completion Progress Bar */}
+                      <div className="mt-3.5 pt-3 border-t border-[#21262d]/50">
+                        <ModuleProgressBar course={c} />
+                      </div>
                     </div>
 
                     <div className="pt-4 mt-6 border-t border-[#21262d] flex justify-between items-center">
@@ -3945,7 +4014,7 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
               <div className="bg-[#161b22] border border-[#30363d] p-2.5 rounded-xl space-y-1">
                 <div className="text-[10.5px] font-bold text-white font-mono">ARCENE IRAKOZE</div>
                 <div className="text-[9.5px] text-teal-400 font-mono">Hotline: +250 796 599 461</div>
-                <div className="text-[9.5px] text-gray-500 font-mono">Email: support@powercode.academy</div>
+                <div className="text-[9.5px] text-gray-500 font-mono">Email: arceneirakoze550@gmail.com</div>
               </div>
             </div>
 
@@ -4125,13 +4194,20 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
         <button
           onClick={() => setAiChatOpen(!aiChatOpen)}
           className={`bg-gradient-to-r from-orange-600 to-[#ff7b00] text-white p-4 rounded-full shadow-2xl transition-all hover:scale-110 flex items-center justify-center border border-white/20 cursor-pointer-action ${
-            aiChatOpen ? "rotate-90 bg-gray-600" : "animate-bounce"
+            aiChatOpen ? "rotate-90 bg-gray-600" : "hover:shadow-[0_0_15px_rgba(255,123,0,0.5)]"
           }`}
           title="Instant AI Mentorship Desk"
         >
           {aiChatOpen ? <X className="w-5 h-5 text-white" /> : <Sparkles className="w-5 h-5 text-white animate-pulse" />}
         </button>
       </div>
+
+      <DirectChatDrawer
+        isOpen={directChatOpen}
+        onClose={() => setDirectChatOpen(false)}
+        currentUser={user}
+        triggerToast={triggerToast}
+      />
 
       {/* 5. PORTALS / MODAL OVERLAYS */}
       {showLogin && (
@@ -4827,7 +4903,7 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
         <div className="fixed bottom-6 right-6 z-50 max-w-sm bg-[#161b22] border border-[#ff7b00] p-4 rounded-xl shadow-2xl animate-fade-in" id="install-app-notification-prompt">
           <div className="flex gap-3">
             <div className="p-2 bg-[#ff7b00]/10 rounded-lg h-fit">
-              <Download className="w-5 h-5 text-[#ff7b00] animate-bounce" />
+              <Download className="w-5 h-5 text-[#ff7b00] animate-pulse" />
             </div>
             <div className="space-y-2 text-left">
               <h4 className="text-xs font-bold text-white uppercase tracking-wider">
