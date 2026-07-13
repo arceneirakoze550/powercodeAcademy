@@ -4486,6 +4486,86 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
                         </button>
                       </div>
 
+                      {/* Email alerts for new course modules */}
+                      <div className="flex justify-between items-center text-xs pt-2 border-t border-[#21262d]/70">
+                        <div>
+                          <span className="font-bold text-slate-200 block">New Course Modules Email Alerts</span>
+                          <span className="text-[9.5px] text-gray-500">Receive email alerts when new course modules are published.</span>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            const updated = {
+                              ...userNotificationSettings,
+                              emailAlertsNewModules: !userNotificationSettings.emailAlertsNewModules
+                            };
+                            setUserNotificationSettings(updated);
+                            try {
+                              const res = await fetch("/api/notifications/settings", {
+                                method: "POST",
+                                headers: {
+                                  "Content-Type": "application/json",
+                                  "Authorization": `Bearer ${user.email}`
+                                },
+                                body: JSON.stringify(updated)
+                              });
+                              const data = await res.json();
+                              if (data.success) {
+                                setFeedback("✨ New course modules email alerts updated!");
+                              }
+                            } catch (_) {}
+                          }}
+                          className={`w-10 h-5.5 rounded-full p-0.5 transition-colors relative cursor-pointer ${
+                            userNotificationSettings.emailAlertsNewModules !== false ? "bg-orange-500" : "bg-[#21262d] border border-[#30363d]"
+                          }`}
+                        >
+                          <div
+                            className={`w-3.5 h-3.5 bg-white rounded-full transition-all ${
+                              userNotificationSettings.emailAlertsNewModules !== false ? "translate-x-4" : "translate-x-0"
+                            }`}
+                          />
+                        </button>
+                      </div>
+
+                      {/* Email alerts for direct message replies */}
+                      <div className="flex justify-between items-center text-xs pt-2 border-t border-[#21262d]/70">
+                        <div>
+                          <span className="font-bold text-slate-200 block">Direct Message Email Alerts</span>
+                          <span className="text-[9.5px] text-gray-500">Receive email alerts when a user or admin replies to your DMs.</span>
+                        </div>
+                        <button
+                          onClick={async () => {
+                            const updated = {
+                              ...userNotificationSettings,
+                              emailAlertsDmReplies: !userNotificationSettings.emailAlertsDmReplies
+                            };
+                            setUserNotificationSettings(updated);
+                            try {
+                              const res = await fetch("/api/notifications/settings", {
+                                method: "POST",
+                                headers: {
+                                  "Content-Type": "application/json",
+                                  "Authorization": `Bearer ${user.email}`
+                                },
+                                body: JSON.stringify(updated)
+                              });
+                              const data = await res.json();
+                              if (data.success) {
+                                setFeedback("✨ Direct message email alerts updated!");
+                              }
+                            } catch (_) {}
+                          }}
+                          className={`w-10 h-5.5 rounded-full p-0.5 transition-colors relative cursor-pointer ${
+                            userNotificationSettings.emailAlertsDmReplies !== false ? "bg-orange-500" : "bg-[#21262d] border border-[#30363d]"
+                          }`}
+                        >
+                          <div
+                            className={`w-3.5 h-3.5 bg-white rounded-full transition-all ${
+                              userNotificationSettings.emailAlertsDmReplies !== false ? "translate-x-4" : "translate-x-0"
+                            }`}
+                          />
+                        </button>
+                      </div>
+
                     </div>
                   </div>
 

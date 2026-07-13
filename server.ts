@@ -3956,7 +3956,16 @@ app.post("/api/upload", upload.any(), (req: any, res) => {
   // Generate a premium asset identifier matching the structure of Cloudinary paths
   const randomSlug = Math.random().toString(36).substring(2, 10);
   const folder = fileType === "video" ? "videos" : (fileType === "pdf" ? "pdfs" : "images");
-  const mockCloudinaryUrl = `https://res.cloudinary.com/powercode/image/upload/v172605/${folder}/${randomSlug}_${fileName.replace(/\s+/g, "_")}`;
+  
+  // Real data URL conversion for images so they render flawlessly
+  let finalAssetUrl = `https://res.cloudinary.com/powercode/image/upload/v172605/${folder}/${randomSlug}_${fileName.replace(/\s+/g, "_")}`;
+  if (req.files && req.files.length > 0) {
+    const file = req.files[0];
+    if (file.mimetype.startsWith("image/")) {
+      const base64Data = file.buffer.toString("base64");
+      finalAssetUrl = `data:${file.mimetype};base64,${base64Data}`;
+    }
+  }
 
   const db = getDB();
 
@@ -3965,7 +3974,7 @@ app.post("/api/upload", upload.any(), (req: any, res) => {
   if (fileType === "video" && lessonId) {
     videoUploadEmitter.emit("post-upload", {
       lessonId: Number(lessonId),
-      videoUrl: mockCloudinaryUrl
+      videoUrl: finalAssetUrl
     });
   }
 
@@ -3974,14 +3983,14 @@ app.post("/api/upload", upload.any(), (req: any, res) => {
     db.tutorialVideos.push({
       id: db.tutorialVideos.length + 1,
       tutorialId: 0,
-      videoUrl: mockCloudinaryUrl,
+      videoUrl: finalAssetUrl,
       fileName: fileName
     });
   } else {
     db.tutorialImages.push({
       id: db.tutorialImages.length + 1,
       tutorialId: 0,
-      imageUrl: mockCloudinaryUrl
+      imageUrl: finalAssetUrl
     });
   }
 
@@ -3989,9 +3998,9 @@ app.post("/api/upload", upload.any(), (req: any, res) => {
 
   res.json({
     success: true,
-    url: mockCloudinaryUrl,
+    url: finalAssetUrl,
     fileName,
-    secure_url: mockCloudinaryUrl,
+    secure_url: finalAssetUrl,
     asset_id: `cl_ps_${randomSlug}`
   });
 });
@@ -4711,6 +4720,95 @@ app.post("/api/payments/request", (req, res) => {
   res.json({ success: true, request: paymentReq });
 });
 
+// SUBMIT PRO UPGRADE PAYMENT REQUEST
+app.post("/api/premium/pro/purchase", (req, res) => {
+  const user = parseUserFromAuth(req);
+  if (!user) return res.status(401).json({ error: "Authentication required" });
+
+  const { phone, paymentMethod, amount, proofUrl } = req.body;
+  if (!phone || !paymentMethod || !amount || !proofUrl) {
+    return res.status(400).json({ error: "Missing required payment fields" });
+  }
+
+  const db = getDB();
+  db.paymentRequests = db.paymentRequests || [];
+  db.paymentProofs = db.paymentProofs || [];
+  db.transactions = db.transactions || [];
+
+  const nextReqId = db.paymentRequests.length ? Math.max(...db.paymentRequests.map((r: any) => r.id)) + 1 : 1;
+  const timestamp = new Date().toISOString();
+
+  const paymentReq = {
+    id: nextReqId,
+    userId: user.id,
+    userName: user.name,
+    userEmail: user.email,
+    contentType: "PLATFORM_PRO",
+    contentId: 0,
+    contentTitle: "PowerCode Premium Pro Plan",
+    paymentMethod,
+    phone,
+    amountPaid: Number(amount),
+    proofUrl,
+    status: "PENDING",
+    rejectionReason: "",
+    createdAt: timestamp
+  };
+
+  db.paymentRequests.push(paymentReq);
+
+  const nextProofId = db.paymentProofs.length ? Math.max(...db.paymentProofs.map((p: any) => p.id)) + 1 : 1;
+  db.paymentProofs.push({
+    id: nextProofId,
+    requestId: nextReqId,
+    url: proofUrl,
+    uploadedAt: timestamp
+  });
+
+  const nextTxId = db.transactions.length ? Math.max(...db.transactions.map((t: any) => t.id)) + 1 : 1;
+  db.transactions.push({
+    id: nextTxId,
+    userId: user.id,
+    requestId: nextReqId,
+    amount: Number(amount),
+    type: "PURCHASE",
+    status: "PENDING",
+    timestamp: timestamp
+  });
+
+  saveDB(db);
+
+  if (pgPool && pgConnectedStatus) {
+    (async () => {
+      try {
+        await pgPool.query(`
+          INSERT INTO payment_requests (id, user_id, user_name, user_email, content_type, content_id, content_title, payment_method, phone, amount_paid, proof_url, status, rejection_reason, created_at)
+          VALUES ($1, $2, $3, $4, 'PLATFORM_PRO', 0, 'PowerCode Premium Pro Plan', $5, $6, $7, $8, 'PENDING', '', $9)
+        `, [nextReqId, user.id, user.name, user.email, paymentMethod, phone, Number(amount), proofUrl, timestamp]);
+
+        await pgPool.query(`
+          INSERT INTO payment_proofs (id, request_id, url, uploaded_at)
+          VALUES ($1, $2, $3, $4)
+        `, [nextProofId, nextReqId, proofUrl, timestamp]);
+
+        await pgPool.query(`
+          INSERT INTO transactions (id, user_id, request_id, amount, type, status, timestamp)
+          VALUES ($1, $2, $3, $4, 'PURCHASE', 'PENDING', $5)
+        `, [nextTxId, user.id, nextReqId, Number(amount), timestamp]);
+      } catch (err) {
+        console.error("Neon Postgres inserts error on pro upgrade sync:", err);
+      }
+    })();
+  }
+
+  notifyUser(-1, "New Pro Upgrade Payment! 💰", `${user.name} submitted proof for Pro Plan (${paymentMethod} phone: ${phone})`, "INFO", "payments");
+  notifyUser(user.id, "Pro Upgrade Payment Submitted! 💳", `We received your payment proof for the Premium Pro Plan. It is safely queued for admin review.`, "INFO", "purchases");
+
+  io.emit("NEW_PAYMENT_REQUEST", paymentReq);
+
+  res.json({ success: true, request: paymentReq });
+});
+
 // Student check payment requests status
 app.get("/api/payments/my-status", (req, res) => {
   const user = parseUserFromAuth(req);
@@ -5057,7 +5155,9 @@ app.get("/api/notifications/settings", (req, res) => {
       inAppNotifications: true,
       email_notifications: true,
       push_notifications: true,
-      sound_notifications: true
+      sound_notifications: true,
+      emailAlertsNewModules: true,
+      emailAlertsDmReplies: true
     };
     db.notificationSettings.push(settings);
     saveDB(db);
@@ -5071,6 +5171,8 @@ app.get("/api/notifications/settings", (req, res) => {
   settings.email_notifications = settings.email_notifications !== false;
   settings.push_notifications = settings.push_notifications !== false;
   settings.sound_notifications = settings.sound_notifications !== false;
+  settings.emailAlertsNewModules = settings.emailAlertsNewModules !== false;
+  settings.emailAlertsDmReplies = settings.emailAlertsDmReplies !== false;
 
   res.json({ success: true, settings });
 });
@@ -5080,7 +5182,17 @@ app.post("/api/notifications/settings", (req, res) => {
   const user = parseUserFromAuth(req);
   if (!user) return res.status(401).json({ error: "Authentication required" });
 
-  const { email_notifications, push_notifications, sound_notifications, emailNotifications, pushNotifications, soundNotifications, inAppNotifications } = req.body;
+  const { 
+    email_notifications, 
+    push_notifications, 
+    sound_notifications, 
+    emailNotifications, 
+    pushNotifications, 
+    soundNotifications, 
+    inAppNotifications,
+    emailAlertsNewModules,
+    emailAlertsDmReplies
+  } = req.body;
   const db = getDB();
   db.notificationSettings = db.notificationSettings || [];
 
@@ -5089,6 +5201,8 @@ app.post("/api/notifications/settings", (req, res) => {
   const emailVal = email_notifications !== undefined ? !!email_notifications : (emailNotifications !== undefined ? !!emailNotifications : true);
   const pushVal = push_notifications !== undefined ? !!push_notifications : (pushNotifications !== undefined ? !!pushNotifications : true);
   const soundVal = sound_notifications !== undefined ? !!sound_notifications : (soundNotifications !== undefined ? !!soundNotifications : (inAppNotifications !== undefined ? !!inAppNotifications : true));
+  const newModulesVal = emailAlertsNewModules !== undefined ? !!emailAlertsNewModules : true;
+  const dmRepliesVal = emailAlertsDmReplies !== undefined ? !!emailAlertsDmReplies : true;
 
   if (!settings) {
     settings = {
@@ -5105,6 +5219,8 @@ app.post("/api/notifications/settings", (req, res) => {
   settings.email_notifications = emailVal;
   settings.push_notifications = pushVal;
   settings.sound_notifications = soundVal;
+  settings.emailAlertsNewModules = newModulesVal;
+  settings.emailAlertsDmReplies = dmRepliesVal;
 
   saveDB(db);
 

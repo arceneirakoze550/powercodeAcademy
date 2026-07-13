@@ -3,7 +3,7 @@ import {
   Sparkles, Cpu, BookOpen, FileText, Terminal, Flame, Info, Menu, X, Globe,
   ChevronDown, LogOut, Award, MessageSquare, Plus, Search, Bookmark,
   HelpCircle, Send, ThumbsUp, Check, Lock, Unlock, ExternalLink, HelpCircle as FaqIcon,
-  ChevronLeft, ChevronRight, Download, Sun, Moon, Wifi, WifiOff, Trash2, AlertTriangle, Play, Palette
+  ChevronLeft, ChevronRight, Download, Sun, Moon, Wifi, WifiOff, Trash2, AlertTriangle, Play, Palette, QrCode
 } from "lucide-react";
 
 import { useTheme } from "./utils/ThemeContext";
@@ -18,6 +18,21 @@ import { ConfirmDeleteModal } from "./components/ConfirmDeleteModal";
 import { pdfExportService } from "./utils/pdfExportService";
 import { io } from "socket.io-client";
 import { SoundManager } from "./lib/audio";
+
+const isImageUrl = (url: string): boolean => {
+  if (!url) return false;
+  const cleanUrl = url.toLowerCase().split("?")[0];
+  return (
+    cleanUrl.startsWith("data:image/") ||
+    cleanUrl.includes("/images/") ||
+    cleanUrl.endsWith(".png") ||
+    cleanUrl.endsWith(".jpg") ||
+    cleanUrl.endsWith(".jpeg") ||
+    cleanUrl.endsWith(".webp") ||
+    cleanUrl.endsWith(".gif") ||
+    (cleanUrl.includes("cloudinary.com") && cleanUrl.includes("/images"))
+  );
+};
 import LoadingScreen from "./components/LoadingScreen";
 import JSZip from "jszip";
 import { ModuleProgressBar } from "./components/ModuleProgressBar";
@@ -78,6 +93,240 @@ const isEmbeddableVideoUrl = (url: string): boolean => {
     url.includes("youtu.be") ||
     url.includes("vimeo.com") ||
     url.includes("embed")
+  );
+};
+
+const ByteCatcherGame = () => {
+  const [score, setScore] = useState(0);
+  const [highScore, setHighScore] = useState(() => Number(localStorage.getItem("powercode_catcher_highscore") || 0));
+  const [lives, setLives] = useState(3);
+  const [active, setActive] = useState(false);
+  const [gameOver, setGameOver] = useState(false);
+  const [basketX, setBasketX] = useState(50); // percentage 0-100
+  const [items, setItems] = useState<{ id: number; x: number; y: number; isBug: boolean; letter: string; speed: number }[]>([]);
+  
+  const containerRef = useRef<HTMLDivElement>(null);
+  const nextId = useRef(1);
+
+  // Keyboard listeners for desktop
+  useEffect(() => {
+    if (!active) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") {
+        setBasketX(prev => Math.max(2, prev - 8));
+      } else if (e.key === "ArrowRight") {
+        setBasketX(prev => Math.min(98, prev + 8));
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [active]);
+
+  // Touch & Mouse slide support for smooth mobile & desktop control
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!active || !containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 100;
+    setBasketX(Math.max(2, Math.min(98, x)));
+  };
+
+  // Start game
+  const startGame = () => {
+    setScore(0);
+    setLives(3);
+    setItems([]);
+    setGameOver(false);
+    setActive(true);
+  };
+
+  // Spawner and game loop
+  useEffect(() => {
+    if (!active) return;
+
+    const spawnTimer = setInterval(() => {
+      const isBug = Math.random() > 0.6;
+      const letters = isBug ? ["🐛", "👾", "❌", "BUG"] : ["1", "0", "{ }", "JS", "PY", "TS", "HTML", "CSS"];
+      const letter = letters[Math.floor(Math.random() * letters.length)];
+      setItems(prev => [
+        ...prev,
+        {
+          id: nextId.current++,
+          x: Math.random() * 90 + 5,
+          y: 0,
+          isBug,
+          letter,
+          speed: Math.random() * 3 + 3
+        }
+      ]);
+    }, 1200);
+
+    const gameLoop = setInterval(() => {
+      setItems(prev => {
+        const nextItems: typeof prev = [];
+        for (const item of prev) {
+          const nextY = item.y + item.speed;
+          
+          // Collision check near bottom (y percentage between 82 and 92)
+          if (nextY >= 82 && nextY <= 92 && Math.abs(item.x - basketX) < 12) {
+            if (item.isBug) {
+              setLives(l => {
+                const nl = l - 1;
+                if (nl <= 0) {
+                  setActive(false);
+                  setGameOver(true);
+                }
+                return nl;
+              });
+              setScore(s => Math.max(0, s - 10));
+              try { SoundManager.playSound("error"); } catch(_) {}
+            } else {
+              setScore(s => {
+                const ns = s + 10;
+                if (ns > highScore) {
+                  setHighScore(ns);
+                  localStorage.setItem("powercode_catcher_highscore", ns.toString());
+                }
+                return ns;
+              });
+              try { SoundManager.playSound("success"); } catch(_) {}
+            }
+            continue; // Caught, discard
+          }
+
+          if (nextY > 100) {
+            // Missed!
+            if (!item.isBug) {
+              // Missed a good byte! Lose life
+              setLives(l => {
+                const nl = l - 1;
+                if (nl <= 0) {
+                  setActive(false);
+                  setGameOver(true);
+                }
+                return nl;
+              });
+            }
+            continue; // Discard
+          }
+
+          nextItems.push({ ...item, y: nextY });
+        }
+        return nextItems;
+      });
+    }, 50);
+
+    return () => {
+      clearInterval(spawnTimer);
+      clearInterval(gameLoop);
+    };
+  }, [active, basketX, highScore]);
+
+  return (
+    <div 
+      ref={containerRef}
+      onPointerMove={handlePointerMove}
+      className="relative w-full h-64 bg-[#0d1117] border border-[#ff7b00]/30 rounded-2xl overflow-hidden cursor-crosshair select-none flex flex-col justify-between p-3"
+    >
+      {/* HUD Header */}
+      <div className="flex justify-between items-center text-[10px] font-mono border-b border-[#21262d] pb-2 text-gray-300 z-10">
+        <div className="flex items-center gap-2">
+          <span className="text-[#ff7b00] font-bold">BYTE CATCHER</span>
+          <span className="text-slate-500">|</span>
+          <span>SCORE: <strong className="text-white">{score}</strong></span>
+        </div>
+        <div className="flex items-center gap-3">
+          <span>HIGH: <strong className="text-orange-400">{highScore}</strong></span>
+          <span className="text-slate-500">|</span>
+          <span className="flex gap-0.5">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <span key={i} className={`text-[10px] ${i < lives ? "opacity-100 scale-110" : "opacity-25"} transition-all`}>
+                ❤️
+              </span>
+            ))}
+          </span>
+        </div>
+      </div>
+
+      {/* Screen Area */}
+      <div className="relative flex-grow w-full overflow-hidden">
+        {active ? (
+          <>
+            {/* Falling items */}
+            {items.map(item => (
+              <div
+                key={item.id}
+                style={{ left: `${item.x}%`, top: `${item.y}%` }}
+                className={`absolute -translate-x-1/2 -translate-y-1/2 font-mono font-black text-[10px] px-1.5 py-0.5 rounded shadow-lg transition-all duration-75 flex items-center gap-1 ${
+                  item.isBug 
+                    ? "bg-red-500/20 text-red-400 border border-red-500/40 animate-pulse" 
+                    : "bg-emerald-500/20 text-emerald-400 border border-emerald-500/40"
+                }`}
+              >
+                <span>{item.letter}</span>
+              </div>
+            ))}
+
+            {/* Code Basket */}
+            <div 
+              style={{ left: `${basketX}%` }}
+              className="absolute bottom-1 -translate-x-1/2 bg-gradient-to-r from-orange-500 to-yellow-500 border border-orange-400 text-black font-extrabold font-mono text-[8px] px-3 py-0.5 rounded-full shadow-lg transition-all duration-75 flex items-center gap-1.5 whitespace-nowrap"
+            >
+              <span>[ POWER_BASKET ]</span>
+            </div>
+          </>
+        ) : (
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-4 bg-black/40 backdrop-blur-[1px]">
+            {gameOver ? (
+              <div className="space-y-2">
+                <span className="text-red-500 font-mono font-bold uppercase tracking-widest text-xs animate-bounce block">👾 GAME OVER 👾</span>
+                <p className="text-gray-400 text-[10px]">Your connection is still restoring. Final caught bits: <strong className="text-orange-400">{score}</strong></p>
+                <button
+                  type="button"
+                  onClick={startGame}
+                  className="bg-[#ff7b00] hover:bg-[#e66f00] text-white font-extrabold text-[9px] px-3 py-1.5 rounded-xl transition-all uppercase cursor-pointer"
+                >
+                  Restart Code Cycle
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <p className="text-slate-400 text-[10px] max-w-sm">
+                  Catch the compilation bytes (<strong className="text-emerald-400">0, 1, TS, JS</strong>)! Avoid the bugs (<strong className="text-red-400">🐛, 👾, ❌</strong>) or lose code vitality.
+                </p>
+                <button
+                  type="button"
+                  onClick={startGame}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-[9px] tracking-wider px-4 py-2 rounded-xl transition-all uppercase cursor-pointer border border-emerald-500 shadow-lg shadow-emerald-950/40 animate-pulse"
+                >
+                  Initiate Byte Catch 🎮
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Control Help */}
+      <div className="flex justify-between items-center text-[8px] font-mono text-gray-500 border-t border-[#21262d] pt-2">
+        <span>Slide mouse/finger on screen or use Left/Right keys</span>
+        <div className="flex gap-1">
+          <button 
+            type="button"
+            onPointerDown={() => setBasketX(prev => Math.max(0, prev - 12))}
+            className="p-1 px-2 rounded bg-[#21262d] text-white hover:bg-orange-500 transition-colors"
+          >
+            ◀ Left
+          </button>
+          <button 
+            type="button"
+            onPointerDown={() => setBasketX(prev => Math.min(100, prev + 12))}
+            className="p-1 px-2 rounded bg-[#21262d] text-white hover:bg-orange-500 transition-colors"
+          >
+            Right ▶
+          </button>
+        </div>
+      </div>
+    </div>
   );
 };
 
@@ -144,6 +393,29 @@ export default function App() {
   const [isOfflineSimulated, setIsOfflineSimulated] = useState<boolean>(() => {
     return localStorage.getItem("powercode_offline_sim") === "true";
   });
+  const [isActualOffline, setIsActualOffline] = useState<boolean>(() => {
+    return typeof navigator !== "undefined" ? !navigator.onLine : false;
+  });
+  const [showOfflineGame, setShowOfflineGame] = useState<boolean>(false);
+  const [qrModalOpen, setQrModalOpen] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleOnline = () => {
+      setIsActualOffline(false);
+      triggerToast("Your real network connection has returned! 🌐", "success");
+    };
+    const handleOffline = () => {
+      setIsActualOffline(true);
+      triggerToast("You are offline! Network connection lost. 🔌", "warning");
+    };
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
 
   // Classroom personal notes & lesson discussion comments states
   const [currentLessonNotes, setCurrentLessonNotes] = useState<string>("");
@@ -186,6 +458,7 @@ export default function App() {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState<number>(0);
   const [bellDropdownOpen, setBellDropdownOpen] = useState<boolean>(false);
+  const [mobileNotificationsOpen, setMobileNotificationsOpen] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [toastType, setToastType] = useState<string>("info");
   const [isFirstLoadDone, setIsFirstLoadDone] = useState<boolean>(false);
@@ -1760,6 +2033,16 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
                 </>
               )}
 
+              {/* QR Code Scan Access Button */}
+              <button
+                onClick={() => setQrModalOpen(true)}
+                className="bg-[#21262d] border border-[#30363d] p-2 rounded-lg text-xs text-white hover:border-[#ff7b00] transition-colors cursor-pointer flex items-center justify-center shrink-0 gap-1"
+                title="Access Web-App on Mobile via QR Code"
+              >
+                <QrCode className="w-3.5 h-3.5 text-orange-500" />
+                <span className="hidden lg:inline text-[10px] font-bold text-gray-300 uppercase">QR Link</span>
+              </button>
+
               {/* Theme Dropdown Selector */}
               <div className="relative">
                 <button
@@ -2087,6 +2370,30 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
                 </div>
               )}
               
+              {/* Mobile Notification Bell with Badge Count */}
+              {user && (
+                <button
+                  onClick={() => {
+                    setMobileNotificationsOpen(true);
+                    fetchNotifications();
+                  }}
+                  className="relative text-gray-400 hover:text-white p-1.5 rounded-md ml-1 bg-[#21262d] border border-[#30363d] hover:border-[#ff7b00] transition-all cursor-pointer flex items-center justify-center gap-1 shrink-0"
+                  aria-label="Open Mobile Notifications"
+                  title="Notifications Alert Center"
+                  id="mobile-notification-bell-btn"
+                >
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-[#ff7b00]">
+                    <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+                    <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+                  </svg>
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white font-extrabold text-[8.5px] min-w-4 h-4 rounded-full flex items-center justify-center px-1 border border-[#161b22] animate-pulse">
+                      {unreadCount}
+                    </span>
+                  )}
+                </button>
+              )}
+
               {/* Quick cycle theme for mobile & tablet */}
               <button
                 onClick={toggleTheme}
@@ -2095,6 +2402,16 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
                 title={`Cycle Visual Themes (Current: ${theme})`}
               >
                 <Palette className="w-4 h-4 text-[#ff7b00]" />
+              </button>
+
+              {/* QR Code trigger for mobile & tablet */}
+              <button
+                onClick={() => setQrModalOpen(true)}
+                className="text-gray-400 hover:text-white p-1.5 rounded-md ml-1 bg-[#21262d] border border-[#30363d] hover:border-[#ff7b00] transition-all cursor-pointer flex items-center justify-center gap-1 shrink-0"
+                aria-label="Open Mobile QR Link"
+                title="Scan to view on Mobile"
+              >
+                <QrCode className="w-4 h-4 text-orange-500" />
               </button>
 
               <button
@@ -2138,6 +2455,29 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
               >
                 <MessageSquare className="w-3.5 h-3.5 text-[#ff7b00]" />
                 <span>DIRECT CHAT ROOM</span>
+              </button>
+            )}
+            {user && (
+              <button 
+                onClick={() => { 
+                  setMobileMenuOpen(false); 
+                  setMobileNotificationsOpen(true);
+                  fetchNotifications();
+                }} 
+                className="w-full text-left py-2 hover:text-[#ff7b00] text-amber-500 flex items-center justify-between font-bold"
+              >
+                <div className="flex items-center gap-2">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-amber-500">
+                    <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+                    <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+                  </svg>
+                  <span>NOTIFICATIONS CENTER</span>
+                </div>
+                {unreadCount > 0 && (
+                  <span className="bg-red-500 text-white font-extrabold text-[9px] min-w-[18px] h-4.5 px-1 rounded-full flex items-center justify-center animate-pulse">
+                    {unreadCount} NEW
+                  </span>
+                )}
               </button>
             )}
             {user && (
@@ -2407,24 +2747,46 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
               </div>
             )}
 
-            {/* OFFLINE SIMULATION NOTIFICATION BANNER */}
-            {isOfflineSimulated && (
-              <div className="mb-6 p-4 bg-orange-500/15 border border-orange-500/35 rounded-xl flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs leading-relaxed">
-                <div>
-                  <h4 className="font-bold text-orange-500 uppercase flex items-center gap-1.5">
-                    <WifiOff className="w-4 h-4 text-orange-500" />
-                    <span>Intermittent Offline Connection Simulated</span>
-                  </h4>
-                  <p className="text-gray-400 mt-1">
-                    You are simulating an intermittent internet connection. Only previously-opened lessons and cached PDFs will render. You can toggle off simulation to download other modules.
-                  </p>
+            {/* OFFLINE SIMULATION/ACTUAL NOTIFICATION BANNER & MINI GAME */}
+            {(isOfflineSimulated || isActualOffline) && (
+              <div className="mb-6 p-4 bg-orange-500/15 border border-orange-500/35 rounded-2xl flex flex-col gap-4 text-xs leading-relaxed shadow-lg">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div>
+                    <h4 className="font-bold text-orange-500 uppercase flex items-center gap-1.5 text-sm">
+                      <WifiOff className="w-4 h-4 text-orange-500 shrink-0" />
+                      <span>{isActualOffline ? "Real Network Offline Detected!" : "Intermittent Offline Connection Simulated"}</span>
+                    </h4>
+                    <p className="text-gray-300 mt-1">
+                      {isActualOffline 
+                        ? "Your browser reports that you are currently disconnected from the Internet. We have activated local offline mode. Tap below to play Byte Catcher!" 
+                        : "You are simulating an offline connection to test caching. Previously opened courses and cached reference PDFs will remain accessible."}
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap gap-2.5">
+                    <button
+                      type="button"
+                      onClick={() => setShowOfflineGame(!showOfflineGame)}
+                      className="bg-[#21262d] hover:bg-[#30363d] text-white border border-[#30363d] font-bold py-2 px-4 rounded-xl transition-all cursor-pointer text-xs"
+                    >
+                      {showOfflineGame ? "Hide Byte Catcher 🎮" : "Play Byte Catcher 🎮"}
+                    </button>
+                    {isOfflineSimulated && (
+                      <button
+                        type="button"
+                        onClick={() => setIsOfflineSimulated(false)}
+                        className="bg-[#ff7b00] hover:bg-[#e66f00] text-white font-bold py-2 px-4 rounded-xl transition-all cursor-pointer text-xs shrink-0"
+                      >
+                        Disable Sim & Go Online
+                      </button>
+                    )}
+                  </div>
                 </div>
-                <button
-                  onClick={() => setIsOfflineSimulated(false)}
-                  className="bg-[#ff7b00] hover:bg-[#e66f00] text-white font-bold py-1.5 px-4 rounded-lg shrink-0 transition-all text-[11px]"
-                >
-                  Go Online
-                </button>
+
+                {showOfflineGame && (
+                  <div className="flex flex-col items-center justify-center pt-2 border-t border-[#30363d]/40">
+                    <ByteCatcherGame />
+                  </div>
+                )}
               </div>
             )}
         
@@ -3319,7 +3681,19 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
                       </div>
                     ) : (
                       <>
-                        {isEmbeddableVideoUrl(classroomVideoFallbackActive ? "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4" : activeStepLesson.videoUrl) ? (
+                        {isImageUrl(activeStepLesson.videoUrl) ? (
+                          <div className="w-full h-full bg-[#0d1117] flex flex-col items-center justify-center p-4 absolute inset-0 overflow-y-auto">
+                            <img
+                              src={activeStepLesson.videoUrl}
+                              alt={activeStepLesson.title}
+                              referrerPolicy="no-referrer"
+                              className="max-w-full max-h-[90%] object-contain rounded-lg border border-[#30363d] shadow-2xl"
+                            />
+                            <div className="text-[10px] text-gray-500 font-mono mt-2 bg-[#161b22] px-2.5 py-1 rounded border border-[#21262d]">
+                              💡 Lesson Concept Screenshot uploaded by Admin
+                            </div>
+                          </div>
+                        ) : isEmbeddableVideoUrl(classroomVideoFallbackActive ? "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4" : activeStepLesson.videoUrl) ? (
                           <iframe
                             key={classroomVideoFallbackActive ? "fallback" : `${activeStepLesson.videoUrl}-retry-${classroomVideoRetryCount}`}
                             src={getEmbedUrl(classroomVideoFallbackActive ? "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4" : activeStepLesson.videoUrl)}
@@ -3470,6 +3844,61 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
                         >
                           Save Video URL
                         </button>
+                      </div>
+
+                      {/* Lesson Explanation Screenshot Upload */}
+                      <div className="flex flex-col gap-2 pt-2 border-t border-orange-500/10">
+                        <label className="text-[10px] text-gray-400 font-mono uppercase block font-bold">Or Upload Explanation Screenshot for this Lesson:</label>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            const formData = new FormData();
+                            formData.append("file", file);
+                            formData.append("fileType", "image");
+                            
+                            try {
+                              const response = await fetch("/api/upload", {
+                                method: "POST",
+                                body: formData,
+                              });
+                              const resData = await response.json();
+                              if (resData.success && resData.url) {
+                                // Update input value in UI
+                                const inputEl = document.getElementById("classroom-admin-video-url-input") as HTMLInputElement;
+                                if (inputEl) {
+                                  inputEl.value = resData.url;
+                                }
+                                
+                                // Auto-save updated screenshot URL
+                                const res = await fetch(`/api/courses/${activeCoursePath.id}/lessons/${activeStepLesson.id}/video`, {
+                                  method: "POST",
+                                  headers: {
+                                    "Content-Type": "application/json",
+                                    "Authorization": `Bearer ${user.email}`
+                                  },
+                                  body: JSON.stringify({ videoUrl: resData.url })
+                                });
+                                const data = await res.json();
+                                if (data.success) {
+                                  alert("🎉 Success: Lesson explanation screenshot has been uploaded and set successfully!");
+                                  activeStepLesson.videoUrl = resData.url;
+                                  fetchAllData();
+                                } else {
+                                  alert("Error setting video URL: " + data.error);
+                                }
+                              } else {
+                                alert("Upload failed: " + (resData.error || "Unknown error"));
+                              }
+                            } catch (err: any) {
+                              alert("Failed uploading lesson screenshot: " + err.message);
+                            }
+                          }}
+                          className="text-xs text-gray-400 bg-[#0d1117] border border-[#30363d] p-1.5 rounded-lg w-full cursor-pointer hover:border-gray-600 transition-colors"
+                        />
+                        <p className="text-[9px] text-gray-500 font-mono">This instantly uploads the picture and sets it as the core Study Concept illustration, replacing any traditional video playback.</p>
                       </div>
                     </div>
                   )}
@@ -4209,6 +4638,171 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
         triggerToast={triggerToast}
       />
 
+      {/* MOBILE FRIENDLY FULL SCREEN NOTIFICATION OVERLAY */}
+      {mobileNotificationsOpen && user && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[999] flex items-center justify-center p-3 animate-fade-in" id="mobile-notifications-modal">
+          <div className="bg-[#161b22] border border-[#ff7b00]/40 rounded-2xl w-full max-w-md shadow-2xl relative max-h-[85vh] overflow-hidden flex flex-col">
+            
+            {/* Header border flash */}
+            <div className="h-1.5 w-full bg-gradient-to-r from-yellow-500 via-orange-500 to-red-500"></div>
+
+            {/* Header */}
+            <div className="px-4 py-3.5 border-b border-[#30363d] flex items-center justify-between bg-[#11141a]">
+              <div className="flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-[#ff7b00]">
+                  <path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9" />
+                  <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+                </svg>
+                <span className="font-extrabold text-white text-xs uppercase tracking-wider font-mono">Mobile Notification Center</span>
+              </div>
+              <button 
+                onClick={() => setMobileNotificationsOpen(false)}
+                className="text-gray-400 hover:text-white p-1 rounded-lg hover:bg-[#21262d] transition-all cursor-pointer"
+                aria-label="Close notification center"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Actions subheader bar */}
+            <div className="px-4 py-2 border-b border-[#21262d] bg-[#0d1117]/50 flex justify-between items-center text-xs">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] text-gray-400 font-mono">Total: <strong className="text-white">{notifications.length}</strong></span>
+                {unreadCount > 0 && (
+                  <span className="bg-[#ff7b00]/15 text-[#ff7b00] px-2 py-0.5 rounded-full text-[9px] font-bold">
+                    {unreadCount} NEW
+                  </span>
+                )}
+              </div>
+              {notifications.length > 0 && (
+                <button
+                  onClick={async () => {
+                    if (window.confirm("Are you sure you want to clear all your notifications?")) {
+                      try {
+                        const res = await fetch("/api/notifications", {
+                          method: "DELETE",
+                          headers: {
+                            "Authorization": `Bearer ${user.email}`
+                          }
+                        });
+                        const resData = await res.json();
+                        if (resData.success) {
+                          setNotifications([]);
+                          setUnreadCount(0);
+                        }
+                      } catch (err) {
+                        console.error("Failed to clear notifications:", err);
+                      }
+                    }
+                  }}
+                  className="text-[9px] text-[#ff7b00] hover:text-[#ff9f43] font-bold uppercase tracking-wider bg-[#ff7b00]/10 px-2 py-1 rounded transition-all cursor-pointer"
+                >
+                  Clear All
+                </button>
+              )}
+            </div>
+
+            {/* Notification items list */}
+            <div className="flex-1 overflow-y-auto divide-y divide-[#21262d] p-1 bg-[#161b22]">
+              {notifications.length > 0 ? (
+                notifications.map((n) => (
+                  <div
+                    key={n.id}
+                    onClick={async () => {
+                      if (!n.isRead) {
+                        try {
+                          const res = await fetch("/api/notifications/read", {
+                            method: "POST",
+                            headers: {
+                              "Content-Type": "application/json",
+                              "Authorization": `Bearer ${user.email}`
+                            },
+                            body: JSON.stringify({ notificationId: n.id })
+                          });
+                          const resData = await res.json();
+                          if (resData.success) {
+                            setNotifications(prev => prev.map(item => item.id === n.id ? { ...item, isRead: true } : item));
+                            setUnreadCount(c => Math.max(0, c - 1));
+                          }
+                        } catch (e) {
+                          console.warn(e);
+                        }
+                      }
+                    }}
+                    className={`p-4 transition-colors cursor-pointer hover:bg-[#21262d] relative rounded-xl my-1 mx-1 ${
+                      !n.isRead ? "bg-[#ff7b00]/5 border-l-4 border-l-[#ff7b00]" : "bg-[#0d1117]/30 opacity-70"
+                    }`}
+                  >
+                    <div className="flex justify-between items-start gap-1">
+                      <span className={`font-extrabold text-[11px] uppercase ${!n.isRead ? "text-[#ff7b00]" : "text-gray-400"}`}>
+                        {n.title || "Academy Alert"}
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[9px] text-gray-500 font-mono">
+                          {n.createdAt ? new Date(n.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "Just Info"}
+                        </span>
+                        <button
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            try {
+                              const res = await fetch(`/api/notifications/${n.id}`, {
+                                method: "DELETE",
+                                headers: {
+                                  "Authorization": `Bearer ${user.email}`
+                                }
+                              });
+                              const resData = await res.json();
+                              if (resData.success) {
+                                setNotifications(prev => prev.filter(item => item.id !== n.id));
+                                if (!n.isRead) {
+                                  setUnreadCount(c => Math.max(0, c - 1));
+                                }
+                              }
+                            } catch (err) {
+                              console.error("Failed to delete notification item:", err);
+                            }
+                          }}
+                          className="p-1.5 text-gray-500 hover:text-red-500 hover:bg-[#21262d] rounded-lg transition-all"
+                          title="Delete notification"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                    <p className="text-[11px] text-gray-300 mt-1.5 leading-relaxed font-sans font-medium pr-5">
+                      {n.message}
+                    </p>
+                    {!n.isRead && (
+                      <span className="text-[8px] text-[#ff7b00]/70 font-mono mt-1.5 block">
+                        ● Click item to Mark as Read
+                      </span>
+                    )}
+                  </div>
+                ))
+              ) : (
+                <div className="p-8 text-center text-gray-500 text-xs font-mono space-y-2">
+                  <p>📭 Your notifications box is empty!</p>
+                  <p className="text-[10px] text-gray-600">You are all caught up on announcements and payment validations.</p>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-3 border-t border-[#30363d] bg-[#11141a] text-center">
+              <button
+                onClick={() => {
+                  setMobileNotificationsOpen(false);
+                  setActiveTab("dashboard");
+                }}
+                className="text-[10px] text-[#ff7b00] hover:text-[#ff9f43] font-bold uppercase tracking-wider bg-[#ff7b00]/10 px-4 py-2 rounded-xl transition-all w-full cursor-pointer"
+              >
+                Go To Full Student Dashboard
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 5. PORTALS / MODAL OVERLAYS */}
       {showLogin && (
         <LoginModal
@@ -4263,6 +4857,45 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
           certificate={selectedCertificate}
           onClose={() => setSelectedCertificate(null)}
         />
+      )}
+
+      {/* ACCESS WEB-APP ON MOBILE QR CODE MODAL */}
+      {qrModalOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-fade-in" id="qr-code-access-modal">
+          <div className="bg-[#161b22] border border-[#30363d] rounded-2xl w-full max-w-sm p-6 space-y-6 text-center shadow-2xl relative">
+            <button
+              onClick={() => setQrModalOpen(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-white p-1.5 bg-[#21262d] hover:bg-orange-500 rounded-lg transition-all"
+              title="Close QR Modal"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="space-y-1.5">
+              <span className="text-[10px] uppercase font-mono tracking-widest text-[#ff7b00] bg-orange-500/10 px-3 py-1 rounded-full border border-orange-500/20">
+                📱 Scan & Learn anywhere
+              </span>
+              <h3 className="text-lg font-extrabold text-white font-sans mt-2">Access Mobile & Tablet Academy</h3>
+              <p className="text-xs text-[#8b949e]">
+                Scan this QR code with your smartphone camera to immediately open this academy screen, submit payments, and code on the go!
+              </p>
+            </div>
+
+            <div className="bg-[#0d1117] border border-[#30363d] rounded-2xl p-4 flex items-center justify-center max-w-[200px] mx-auto shadow-inner group transition-all hover:border-[#ff7b00]">
+              <img
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent("https://powercodeacademy.onrender.com/")}&color=ff7b00&bgcolor=0d1117`}
+                alt="PowerCode Academy QR Code Link"
+                referrerPolicy="no-referrer"
+                className="w-40 h-40 object-contain rounded-lg"
+              />
+            </div>
+
+            <div className="bg-[#21262d]/50 p-3 rounded-xl border border-[#30363d] text-[10px] font-mono text-slate-400 flex flex-col gap-1 select-all break-all text-center">
+              <span className="text-slate-500 block">DIRECT URL LINK:</span>
+              <span className="text-orange-400">https://powercodeacademy.onrender.com/</span>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Central Confirm Delete Modal */}
@@ -4409,7 +5042,7 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
       {/* PDF PAYMENT MODAL: MOBILE MONEY PAYMENT AND PROOF SUBMISSION */}
       {purchasePdfItem && user && (
         <div className="fixed inset-0 min-h-screen bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 animate-fade-in" id="momo-payment-modal">
-          <div className="bg-[#161b22] border border-[#ff7b00]/30 rounded-2xl w-full max-w-lg shadow-2xl relative overflow-hidden flex flex-col">
+          <div className="bg-[#161b22] border border-[#ff7b00]/30 rounded-2xl w-full max-w-lg shadow-2xl relative max-h-[92vh] overflow-y-auto flex flex-col">
             
             {/* Header border flash */}
             <div className="h-1 w-full bg-gradient-to-r from-yellow-500 via-orange-500 to-red-500"></div>
@@ -4503,8 +5136,9 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
               <form 
                 onSubmit={async (e) => {
                   e.preventDefault();
-                  if (!paymentPhone.trim()) {
-                    alert("Please input your payment phone number first.");
+                  const cleanPhone = paymentPhone.trim();
+                  if (!cleanPhone || !cleanPhone.startsWith("7") || cleanPhone.length !== 9) {
+                    alert("Please input a valid Rwanda mobile number starting with 7 (exactly 9 digits).");
                     return;
                   }
                   if (!pdfProofUrl) {
@@ -4526,7 +5160,7 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
                         pdfTitle: purchasePdfItem.title,
                         amountPaid: 15000,
                         paymentMethod,
-                        phone: paymentPhone,
+                        phone: `+250${cleanPhone}`,
                         proofUrl: pdfProofUrl
                       })
                     });
@@ -4551,16 +5185,57 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
                 className="space-y-4"
               >
                 <div>
-                  <label className="text-xs font-bold text-gray-400 block uppercase tracking-wider font-mono mb-1">Your Registered MoMo Phone</label>
-                  <input
-                    type="text"
-                    value={paymentPhone}
-                    onChange={(e) => setPaymentPhone(e.target.value)}
-                    placeholder="e.g. +250 796 599 461"
-                    required
-                    className="w-full bg-[#0d1117] border border-[#30363d] text-white py-2 px-3.5 rounded-xl text-xs outline-none focus:border-[#ff7b00] font-mono placeholder:text-gray-600"
-                  />
-                  <p className="text-[10px] text-gray-500 font-mono mt-1">Our finance department maps transactions against the sender phone log history.</p>
+                  <label className="text-xs font-bold text-gray-400 block uppercase tracking-wider font-mono mb-1.5">Your Registered MoMo Phone</label>
+                  
+                  <div className="flex items-stretch rounded-xl overflow-hidden border border-[#30363d] bg-[#0d1117] focus-within:border-[#ff7b00] transition-all">
+                    {/* Rwanda Flag and Prefix Box */}
+                    <div className="bg-[#161b22] border-r border-[#30363d] px-3.5 flex items-center gap-2 select-none shrink-0">
+                      {/* Flag */}
+                      <div className="w-5.5 h-3.5 flex flex-col rounded-[1px] overflow-hidden border border-gray-700/50 shrink-0">
+                        <div className="bg-[#00A3E0] h-[50%] w-full"></div>
+                        <div className="bg-[#FCD116] h-[25%] w-full"></div>
+                        <div className="bg-[#007A33] h-[25%] w-full"></div>
+                      </div>
+                      <span className="text-xs font-mono font-bold text-gray-300 tracking-tight">+250</span>
+                    </div>
+
+                    {/* Actual input */}
+                    <input
+                      type="text"
+                      value={paymentPhone}
+                      onChange={(e) => {
+                        let val = e.target.value.replace(/\D/g, "");
+                        // If they enter a leading 0, strip it to help them enter starting with 7
+                        if (val.startsWith("0")) {
+                          val = val.substring(1);
+                        }
+                        if (val.length > 9) {
+                          val = val.substring(0, 9);
+                        }
+                        setPaymentPhone(val);
+                      }}
+                      placeholder="7XXXXXXXX"
+                      maxLength={9}
+                      required
+                      className="flex-1 bg-transparent py-2 px-3.5 text-xs text-white outline-none font-mono placeholder:text-gray-600"
+                    />
+                  </div>
+
+                  {/* Real-time validation help-text */}
+                  <div className="flex items-center justify-between text-[10px] mt-1.5 px-1">
+                    {paymentPhone.length === 0 ? (
+                      <span className="text-gray-500 font-mono">Fill in format: 7XXXXX...</span>
+                    ) : !paymentPhone.startsWith("7") ? (
+                      <span className="text-red-400 font-mono font-bold">⚠️ Mobile number must start with 7</span>
+                    ) : paymentPhone.length < 9 ? (
+                      <span className="text-amber-400 font-mono">⚠️ Need {9 - paymentPhone.length} more digits</span>
+                    ) : (
+                      <span className="text-emerald-400 font-mono font-bold">✓ Valid Rwanda Mobile: +250 {paymentPhone}</span>
+                    )}
+                    <span className="text-gray-600 text-[9px] font-mono">{paymentPhone.length}/9 digits</span>
+                  </div>
+
+                  <p className="text-[10px] text-gray-500 font-mono mt-2">Our finance department maps transactions against the sender phone log history.</p>
                 </div>
 
                 {/* Real Payment Receipt Screenshot Upload Block */}
@@ -4656,7 +5331,7 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
       {/* COURSE PAYMENT MODAL: MOBILE MONEY PAYMENT AND PROOF SUBMISSION */}
       {purchaseCourseItem && user && (
         <div className="fixed inset-0 min-h-screen bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 animate-fade-in" id="course-momo-payment-modal">
-          <div className="bg-[#161b22] border border-[#ff7b00]/30 rounded-2xl w-full max-w-lg shadow-2xl relative overflow-hidden flex flex-col">
+          <div className="bg-[#161b22] border border-[#ff7b00]/30 rounded-2xl w-full max-w-lg shadow-2xl relative max-h-[92vh] overflow-y-auto flex flex-col">
             
             {/* Header border flash */}
             <div className="h-1 w-full bg-gradient-to-r from-yellow-500 via-orange-500 to-red-500"></div>
@@ -4750,8 +5425,9 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
               <form 
                 onSubmit={async (e) => {
                   e.preventDefault();
-                  if (!paymentPhone.trim()) {
-                    alert("Please input your payment phone number first.");
+                  const cleanPhone = paymentPhone.trim();
+                  if (!cleanPhone || !cleanPhone.startsWith("7") || cleanPhone.length !== 9) {
+                    alert("Please input a valid Rwanda mobile number starting with 7 (exactly 9 digits).");
                     return;
                   }
                   if (!courseProofUrl) {
@@ -4773,7 +5449,7 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
                         contentTitle: purchaseCourseItem.title,
                         amountPaid: purchaseCourseItem.price || 49,
                         paymentMethod,
-                        phone: paymentPhone,
+                        phone: `+250${cleanPhone}`,
                         proofUrl: courseProofUrl
                       })
                     });
@@ -4796,16 +5472,57 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
                 className="space-y-4"
               >
                 <div>
-                  <label className="text-xs font-bold text-gray-400 block uppercase tracking-wider font-mono mb-1">Your Registered MoMo Phone</label>
-                  <input
-                    type="text"
-                    value={paymentPhone}
-                    onChange={(e) => setPaymentPhone(e.target.value)}
-                    placeholder="e.g. +250 796 599 461"
-                    required
-                    className="w-full bg-[#0d1117] border border-[#30363d] text-white py-2 px-3.5 rounded-xl text-xs outline-none focus:border-[#ff7b00] font-mono placeholder:text-gray-600"
-                  />
-                  <p className="text-[10px] text-gray-500 font-mono mt-1">Our finance department maps transactions against the sender phone log history.</p>
+                  <label className="text-xs font-bold text-gray-400 block uppercase tracking-wider font-mono mb-1.5">Your Registered MoMo Phone</label>
+                  
+                  <div className="flex items-stretch rounded-xl overflow-hidden border border-[#30363d] bg-[#0d1117] focus-within:border-[#ff7b00] transition-all">
+                    {/* Rwanda Flag and Prefix Box */}
+                    <div className="bg-[#161b22] border-r border-[#30363d] px-3.5 flex items-center gap-2 select-none shrink-0">
+                      {/* Flag */}
+                      <div className="w-5.5 h-3.5 flex flex-col rounded-[1px] overflow-hidden border border-gray-700/50 shrink-0">
+                        <div className="bg-[#00A3E0] h-[50%] w-full"></div>
+                        <div className="bg-[#FCD116] h-[25%] w-full"></div>
+                        <div className="bg-[#007A33] h-[25%] w-full"></div>
+                      </div>
+                      <span className="text-xs font-mono font-bold text-gray-300 tracking-tight">+250</span>
+                    </div>
+
+                    {/* Actual input */}
+                    <input
+                      type="text"
+                      value={paymentPhone}
+                      onChange={(e) => {
+                        let val = e.target.value.replace(/\D/g, "");
+                        // If they enter a leading 0, strip it to help them enter starting with 7
+                        if (val.startsWith("0")) {
+                          val = val.substring(1);
+                        }
+                        if (val.length > 9) {
+                          val = val.substring(0, 9);
+                        }
+                        setPaymentPhone(val);
+                      }}
+                      placeholder="7XXXXXXXX"
+                      maxLength={9}
+                      required
+                      className="flex-1 bg-transparent py-2 px-3.5 text-xs text-white outline-none font-mono placeholder:text-gray-600"
+                    />
+                  </div>
+
+                  {/* Real-time validation help-text */}
+                  <div className="flex items-center justify-between text-[10px] mt-1.5 px-1">
+                    {paymentPhone.length === 0 ? (
+                      <span className="text-gray-500 font-mono">Fill in format: 7XXXXX...</span>
+                    ) : !paymentPhone.startsWith("7") ? (
+                      <span className="text-red-400 font-mono font-bold">⚠️ Mobile number must start with 7</span>
+                    ) : paymentPhone.length < 9 ? (
+                      <span className="text-amber-400 font-mono">⚠️ Need {9 - paymentPhone.length} more digits</span>
+                    ) : (
+                      <span className="text-emerald-400 font-mono font-bold">✓ Valid Rwanda Mobile: +250 {paymentPhone}</span>
+                    )}
+                    <span className="text-gray-600 text-[9px] font-mono">{paymentPhone.length}/9 digits</span>
+                  </div>
+
+                  <p className="text-[10px] text-gray-500 font-mono mt-2">Our finance department maps transactions against the sender phone log history.</p>
                 </div>
 
                 {/* Real Payment Receipt Screenshot Upload Block */}
@@ -5053,8 +5770,9 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
               <form
                 onSubmit={async (e) => {
                   e.preventDefault();
-                  if (!paymentPhone.trim()) {
-                    alert("Please input your payment phone number first.");
+                  const cleanPhone = paymentPhone.trim();
+                  if (!cleanPhone || !cleanPhone.startsWith("7") || cleanPhone.length !== 9) {
+                    alert("Please input a valid Rwanda mobile number starting with 7 (exactly 9 digits).");
                     return;
                   }
                   if (!proProofUrl) {
@@ -5071,7 +5789,7 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
                         "Authorization": `Bearer ${user.email}`
                       },
                       body: JSON.stringify({
-                        phone: paymentPhone,
+                        phone: `+250${cleanPhone}`,
                         paymentMethod: paymentMethod,
                         amount: 25000,
                         proofUrl: proProofUrl
@@ -5096,15 +5814,55 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
                 className="space-y-4"
               >
                 <div>
-                  <label className="text-xs font-bold text-gray-400 block uppercase tracking-wider font-mono mb-1">Your Sender MoMo Phone</label>
-                  <input
-                    type="text"
-                    value={paymentPhone}
-                    onChange={(e) => setPaymentPhone(e.target.value)}
-                    placeholder="e.g. +250 796 599 461"
-                    required
-                    className="w-full bg-[#0d1117] border border-[#30363d] text-white py-2 px-3.5 rounded-xl text-xs outline-none focus:border-[#ff7b00] font-mono placeholder:text-gray-600"
-                  />
+                  <label className="text-xs font-bold text-gray-400 block uppercase tracking-wider font-mono mb-1.5">Your Sender MoMo Phone</label>
+                  
+                  <div className="flex items-stretch rounded-xl overflow-hidden border border-[#30363d] bg-[#0d1117] focus-within:border-[#ff7b00] transition-all">
+                    {/* Rwanda Flag and Prefix Box */}
+                    <div className="bg-[#161b22] border-r border-[#30363d] px-3.5 flex items-center gap-2 select-none shrink-0">
+                      {/* Flag */}
+                      <div className="w-5.5 h-3.5 flex flex-col rounded-[1px] overflow-hidden border border-gray-700/50 shrink-0">
+                        <div className="bg-[#00A3E0] h-[50%] w-full"></div>
+                        <div className="bg-[#FCD116] h-[25%] w-full"></div>
+                        <div className="bg-[#007A33] h-[25%] w-full"></div>
+                      </div>
+                      <span className="text-xs font-mono font-bold text-gray-300 tracking-tight">+250</span>
+                    </div>
+
+                    {/* Actual input */}
+                    <input
+                      type="text"
+                      value={paymentPhone}
+                      onChange={(e) => {
+                        let val = e.target.value.replace(/\D/g, "");
+                        // If they enter a leading 0, strip it to help them enter starting with 7
+                        if (val.startsWith("0")) {
+                          val = val.substring(1);
+                        }
+                        if (val.length > 9) {
+                          val = val.substring(0, 9);
+                        }
+                        setPaymentPhone(val);
+                      }}
+                      placeholder="7XXXXXXXX"
+                      maxLength={9}
+                      required
+                      className="flex-1 bg-transparent py-2 px-3.5 text-xs text-white outline-none font-mono placeholder:text-gray-600"
+                    />
+                  </div>
+
+                  {/* Real-time validation help-text */}
+                  <div className="flex items-center justify-between text-[10px] mt-1.5 px-1">
+                    {paymentPhone.length === 0 ? (
+                      <span className="text-gray-500 font-mono">Fill in format: 7XXXXX...</span>
+                    ) : !paymentPhone.startsWith("7") ? (
+                      <span className="text-red-400 font-mono font-bold">⚠️ Mobile number must start with 7</span>
+                    ) : paymentPhone.length < 9 ? (
+                      <span className="text-amber-400 font-mono">⚠️ Need {9 - paymentPhone.length} more digits</span>
+                    ) : (
+                      <span className="text-emerald-400 font-mono font-bold">✓ Valid Rwanda Mobile: +250 {paymentPhone}</span>
+                    )}
+                    <span className="text-gray-600 text-[9px] font-mono">{paymentPhone.length}/9 digits</span>
+                  </div>
                 </div>
 
                 {/* Real Payment Receipt Screenshot Upload Block */}
