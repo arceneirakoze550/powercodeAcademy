@@ -14,6 +14,7 @@ import { LoginModal, RegisterModal, QuizSystem, CodingChallengeModal } from "./c
 import IDE from "./components/IDE";
 import CertificateModal from "./components/CertificateModal";
 import Dashboard from "./components/Dashboard";
+import HomeSlider from "./components/HomeSlider";
 import { ConfirmDeleteModal } from "./components/ConfirmDeleteModal";
 import { pdfExportService } from "./utils/pdfExportService";
 import { io } from "socket.io-client";
@@ -2849,6 +2850,9 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
                 </div>
               )}
             </section>
+
+            {/* INTERACTIVE COURSE VISUAL SLIDESHOW */}
+            <HomeSlider />
 
             {/* INFINITE SLIDING MARQUEE OF TECH STACK */}
             <section className="relative overflow-hidden py-10 border-y border-[#1f242c] bg-[#161b22]/15 w-full select-none animate-fade-in" id="tech-stack-marquee">
