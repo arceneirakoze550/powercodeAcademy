@@ -1184,9 +1184,16 @@ app.use(express.urlencoded({ limit: "15mb", extended: true }));
 
 // Serve custom logo asset
 app.get("/powercodeacademy.png", (req, res) => {
-  const logoPath = path.join(process.cwd(), "powercodeacademy.png");
-  if (fs.existsSync(logoPath)) {
-    res.sendFile(logoPath);
+  const publicPath = path.join(process.cwd(), "public", "powercodeacademy.png");
+  const distPath = path.join(process.cwd(), "dist", "powercodeacademy.png");
+  const rootPath = path.join(process.cwd(), "powercodeacademy.png");
+
+  if (fs.existsSync(publicPath)) {
+    res.sendFile(publicPath);
+  } else if (fs.existsSync(distPath)) {
+    res.sendFile(distPath);
+  } else if (fs.existsSync(rootPath)) {
+    res.sendFile(rootPath);
   } else {
     res.status(404).send("Logo not found");
   }
