@@ -15,6 +15,7 @@ import IDE from "./components/IDE";
 import CertificateModal from "./components/CertificateModal";
 import Dashboard from "./components/Dashboard";
 import HomeSlider from "./components/HomeSlider";
+import StudentSuccess from "./components/StudentSuccess";
 import { ConfirmDeleteModal } from "./components/ConfirmDeleteModal";
 import { pdfExportService } from "./utils/pdfExportService";
 import { io } from "socket.io-client";
@@ -3041,6 +3042,9 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
                 ))}
               </div>
             </section>
+
+            {/* ALUMNI STUDENT SUCCESS TESTIMONIALS SLIDER */}
+            <StudentSuccess />
 
             {/* FREQUENTLY ASKED QUESTIONS GRID (FAQ) */}
             <section className="space-y-6" id="faq-section">
