@@ -396,3 +396,24 @@ body.theme-dark-green .btn-secondary:hover {
   border-color: #10b981 !important;
 }
 
+/* INFINITE MARQUEE SCROLL SYSTEM FOR PROGRAMMING LANGUAGES & LOGOS */
+@keyframes marquee-scroll {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-marquee-infinite {
+  display: flex;
+  width: max-content;
+  animation: marquee-scroll 24s linear infinite;
+}
+
+.animate-marquee-infinite:hover {
+  animation-play-state: paused;
+}
+
+

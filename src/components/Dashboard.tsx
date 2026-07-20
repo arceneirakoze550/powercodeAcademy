@@ -94,6 +94,7 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
   const [paymentStatusFilter, setPaymentStatusFilter] = useState<string>("ALL");
   const [paymentQuery, setPaymentQuery] = useState<string>("");
   const [revenueTimeframe, setRevenueTimeframe] = useState<string>("all");
+  const [selectedProofUrl, setSelectedProofUrl] = useState<string | null>(null);
 
   const [userNotificationSettings, setUserNotificationSettings] = useState<any>({
     emailNotifications: true,
@@ -3174,10 +3175,33 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
                           <React.Fragment key={p.id}>
                             <tr className="hover:bg-[#1f242c] transition-colors">
                               <td className="p-3">
-                                <div className="font-semibold text-white">{p.userName || "Student Recipient"}</div>
-                                <div className="text-[10px] text-[#8b949e] font-mono">{p.userEmail}</div>
-                                <div className="text-[9px] text-gray-500 mt-0.5">
-                                  {new Date(p.createdAt).toLocaleString()}
+                                <div className="flex items-center gap-2.5">
+                                  {p.proofUrl ? (
+                                    <div className="relative group shrink-0">
+                                      <img
+                                        src={p.proofUrl}
+                                        alt="Proof preview"
+                                        className="w-10 h-10 object-cover rounded-lg border border-[#30363d] cursor-pointer group-hover:border-[#ff7b00] transition-all hover:scale-105"
+                                        onClick={() => setSelectedProofUrl(p.proofUrl)}
+                                        referrerPolicy="no-referrer"
+                                        title="Click to view full screen"
+                                      />
+                                      <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center rounded-lg pointer-events-none transition-opacity">
+                                        <Eye className="w-3.5 h-3.5 text-white" />
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="w-10 h-10 rounded-lg border border-[#30363d] bg-[#0d1117] flex items-center justify-center text-gray-600 font-mono text-[9px] shrink-0">
+                                      NO IMG
+                                    </div>
+                                  )}
+                                  <div>
+                                    <div className="font-semibold text-white">{p.userName || "Student Recipient"}</div>
+                                    <div className="text-[10px] text-[#8b949e] font-mono">{p.userEmail}</div>
+                                    <div className="text-[9px] text-gray-500 mt-0.5">
+                                      {new Date(p.createdAt).toLocaleString()}
+                                    </div>
+                                  </div>
                                 </div>
                               </td>
                               <td className="p-3 font-mono">
@@ -3218,14 +3242,13 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
                               <td className="p-3 text-right">
                                 <div className="flex items-center justify-end gap-1.5">
                                   {p.proofUrl && (
-                                    <a
-                                      href={p.proofUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="bg-[#21262d] hover:bg-slate-700 text-slate-300 hover:text-white px-2 py-1 rounded text-[10px] font-mono transition-colors border border-[#30363d]"
+                                    <button
+                                      type="button"
+                                      onClick={() => setSelectedProofUrl(p.proofUrl)}
+                                      className="bg-[#21262d] hover:bg-slate-700 text-slate-300 hover:text-white px-2 py-1 rounded text-[10px] font-mono transition-colors border border-[#30363d] cursor-pointer"
                                     >
-                                      Preview Proof
-                                    </a>
+                                      View Proof
+                                    </button>
                                   )}
                                   
                                   {(p.status === "PENDING" || p.status === "PENDING_APPROVAL") && (
@@ -4676,9 +4699,13 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
                             <span>Phone: {tx.phone || "N/A"}</span>
                             <span>•</span>
                             <span>Proof: {(tx.proofUrl || tx.cloudinaryProofUrl) ? (
-                              <a href={tx.proofUrl || tx.cloudinaryProofUrl} target="_blank" rel="noreferrer" className="text-orange-400 hover:underline inline-flex items-center gap-0.5 font-bold">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedProofUrl(tx.proofUrl || tx.cloudinaryProofUrl)}
+                                className="text-orange-400 hover:underline hover:text-orange-300 inline-flex items-center gap-0.5 font-bold bg-transparent border-none p-0 cursor-pointer"
+                              >
                                 View Proof ↗
-                              </a>
+                              </button>
                             ) : "None"}</span>
                           </div>
                         </td>
@@ -4859,6 +4886,57 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
             </div>
           </div>
 
+        </div>
+      )}
+
+      {/* PAYMENTS SCREENSHOT LIGHTBOX / PROOF MODAL */}
+      {selectedProofUrl && (
+        <div 
+          className="fixed inset-0 bg-black/85 backdrop-blur-md z-50 flex flex-col items-center justify-center p-4 animate-fade-in"
+          onClick={() => setSelectedProofUrl(null)}
+        >
+          <div 
+            className="relative max-w-3xl w-full bg-[#161b22] border border-[#30363d] rounded-2xl overflow-hidden shadow-2xl flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-[#30363d] bg-[#0d1117]">
+              <div className="flex items-center gap-2">
+                <div className="w-2.5 h-2.5 rounded-full bg-orange-500 animate-pulse" />
+                <span className="text-xs font-mono font-bold text-gray-300 uppercase tracking-wider">Official Payment Proof Screenshot</span>
+              </div>
+              <button
+                onClick={() => setSelectedProofUrl(null)}
+                className="text-gray-400 hover:text-white hover:bg-slate-800 px-3 py-1.5 rounded-lg transition-colors cursor-pointer text-xs font-mono font-bold"
+                title="Close Proof"
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            {/* Image Body */}
+            <div className="p-6 flex items-center justify-center bg-[#0d1117] max-h-[70vh] overflow-y-auto">
+              <img
+                src={selectedProofUrl}
+                alt="Payment proof original capture"
+                className="max-w-full max-h-[60vh] object-contain rounded-lg border border-[#21262d] shadow-lg"
+                referrerPolicy="no-referrer"
+              />
+            </div>
+
+            {/* Footer info banner */}
+            <div className="p-4 bg-[#161b22] border-t border-[#30363d] text-center text-[10.5px] text-gray-400 font-mono flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+              <span>Verify date, transaction ID matching MoMo log entries.</span>
+              <a 
+                href={selectedProofUrl} 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="text-[#ff7b00] hover:underline font-bold inline-flex items-center gap-0.5"
+              >
+                Open Original in New Tab ↗
+              </a>
+            </div>
+          </div>
         </div>
       )}
 

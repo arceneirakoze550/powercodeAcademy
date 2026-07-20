@@ -2850,6 +2850,79 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
               )}
             </section>
 
+            {/* INFINITE SLIDING MARQUEE OF TECH STACK */}
+            <section className="relative overflow-hidden py-10 border-y border-[#1f242c] bg-[#161b22]/15 w-full select-none animate-fade-in" id="tech-stack-marquee">
+              <div className="absolute top-0 bottom-0 left-0 w-32 bg-gradient-to-r from-[#0d1117] to-transparent z-10 pointer-events-none" />
+              <div className="absolute top-0 bottom-0 right-0 w-32 bg-gradient-to-l from-[#0d1117] to-transparent z-10 pointer-events-none" />
+              
+              <div className="text-center mb-8 max-w-xl mx-auto px-4">
+                <span className="text-[10px] uppercase font-mono tracking-widest text-[#ff7b00] bg-[#ff7b00]/10 px-3 py-1 rounded-full border border-[#ff7b00]/20">
+                  ⚡ Comprehensive Syllabus Tech Stack
+                </span>
+                <h2 className="text-2xl font-bold text-white mt-3 font-sans">
+                  Learn to Code with Modern Technologies
+                </h2>
+                <p className="text-xs text-[#8b949e] mt-2 leading-relaxed">
+                  Get high-impact coding tutorials, quizzes, real-time feedback, and compiler sandboxes for leading languages and frameworks.
+                </p>
+              </div>
+
+              <div className="relative w-full overflow-hidden flex">
+                <div className="animate-marquee-infinite flex gap-8 items-center py-2">
+                  {[
+                    { name: "Python", img: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/python/python-original.svg" },
+                    { name: "HTML5", img: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/html5/html5-original.svg" },
+                    { name: "CSS3", img: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/css3/css3-original.svg" },
+                    { name: "JavaScript", img: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/javascript/javascript-original.svg" },
+                    { name: "Node.js", img: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/nodejs/nodejs-original.svg" },
+                    { name: "React", img: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/react/react-original.svg" },
+                    { name: "TypeScript", img: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/typescript/typescript-original.svg" },
+                    { name: "Java", img: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/java/java-original.svg" },
+                    { name: "PostgreSQL", img: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/postgresql/postgresql-original.svg" },
+                    { name: "Git", img: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/git/git-original.svg" },
+                  ].concat([
+                    { name: "Python", img: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/python/python-original.svg" },
+                    { name: "HTML5", img: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/html5/html5-original.svg" },
+                    { name: "CSS3", img: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/css3/css3-original.svg" },
+                    { name: "JavaScript", img: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/javascript/javascript-original.svg" },
+                    { name: "Node.js", img: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/nodejs/nodejs-original.svg" },
+                    { name: "React", img: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/react/react-original.svg" },
+                    { name: "TypeScript", img: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/typescript/typescript-original.svg" },
+                    { name: "Java", img: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/java/java-original.svg" },
+                    { name: "PostgreSQL", img: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/postgresql/postgresql-original.svg" },
+                    { name: "Git", img: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/git/git-original.svg" },
+                  ]).concat([
+                    { name: "Python", img: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/python/python-original.svg" },
+                    { name: "HTML5", img: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/html5/html5-original.svg" },
+                    { name: "CSS3", img: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/css3/css3-original.svg" },
+                    { name: "JavaScript", img: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/javascript/javascript-original.svg" },
+                    { name: "Node.js", img: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/nodejs/nodejs-original.svg" },
+                    { name: "React", img: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/react/react-original.svg" },
+                    { name: "TypeScript", img: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/typescript/typescript-original.svg" },
+                    { name: "Java", img: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/java/java-original.svg" },
+                    { name: "PostgreSQL", img: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/postgresql/postgresql-original.svg" },
+                    { name: "Git", img: "https://cdn.jsdelivr.net/gh/devicons/devicon/icons/git/git-original.svg" },
+                  ]).map((tech, idx) => (
+                    <div 
+                      key={idx} 
+                      className="flex items-center gap-3.5 bg-[#161b22]/80 px-6 py-4 rounded-2xl border border-[#30363d] shrink-0 hover:border-[#ff7b00] hover:bg-[#161b22] hover:scale-105 transition-all cursor-pointer shadow-md select-none"
+                    >
+                      <img 
+                        src={tech.img} 
+                        alt={tech.name} 
+                        className="w-10 h-10 object-contain rounded-lg transition-transform"
+                        referrerPolicy="no-referrer"
+                      />
+                      <div className="flex flex-col text-left">
+                        <span className="text-[12px] font-mono font-bold text-slate-100 uppercase tracking-wide leading-none">{tech.name}</span>
+                        <span className="text-[9px] text-[#ff7b00] mt-1 font-mono font-bold">Interactive Core</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+
             {/* THREE-CARD BENTO FEATURE PLATFORMS */}
             <section className="space-y-4" id="features-lobby">
               <div className="text-center max-w-xl mx-auto mb-10">
