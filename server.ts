@@ -2212,7 +2212,7 @@ app.post("/api/users/profile", async (req, res) => {
     return res.status(401).json({ error: "Not authorized to update profile assets." });
   }
 
-  const { name, email, password, profile_picture_url } = req.body;
+  const { name, email, password, profile_picture_url, avatarUrl } = req.body;
   const db = getDB();
   const dbUser = db.users.find(u => u.id === user.id);
   if (!dbUser) {
@@ -2240,9 +2240,10 @@ app.post("/api/users/profile", async (req, res) => {
       dbUser.passwordHash = cleanPass;
     }
   }
-  if (profile_picture_url !== undefined) {
-    dbUser.profile_picture_url = profile_picture_url || "";
-    dbUser.avatarUrl = profile_picture_url || "";
+  const pictureVal = profile_picture_url !== undefined ? profile_picture_url : avatarUrl;
+  if (pictureVal !== undefined) {
+    dbUser.profile_picture_url = pictureVal || "";
+    dbUser.avatarUrl = pictureVal || "";
   }
 
   saveDB(db);
@@ -2328,30 +2329,31 @@ app.get("/api/users/search", (req, res) => {
   const db = getDB();
   const dbUsers = db.users || [];
 
+  const mapUserToDTO = (u: any) => {
+    const realPic = u.profile_picture_url || u.avatarUrl || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100";
+    return {
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      role: u.role || "STUDENT",
+      avatarUrl: realPic,
+      profile_picture_url: realPic,
+      learningStreak: u.learningStreak || 0
+    };
+  };
+
   if (!q) {
-    // Return first 20 users by default for active discovery
+    // Return all other users by default for active discovery
     const filtered = dbUsers
       .filter(u => u.id !== user.id)
-      .slice(0, 20)
-      .map(u => ({
-        id: u.id,
-        name: u.name,
-        email: u.email,
-        avatarUrl: u.avatarUrl || u.profile_picture_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100",
-        learningStreak: u.learningStreak || 0
-      }));
+      .slice(0, 50)
+      .map(mapUserToDTO);
     return res.json({ success: true, users: filtered });
   }
 
   const filtered = dbUsers
     .filter(u => u.id !== user.id && u.name && u.name.toLowerCase().includes(q))
-    .map(u => ({
-      id: u.id,
-      name: u.name,
-      email: u.email,
-      avatarUrl: u.avatarUrl || u.profile_picture_url || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100",
-      learningStreak: u.learningStreak || 0
-    }));
+    .map(mapUserToDTO);
 
   res.json({ success: true, users: filtered });
 });

@@ -30,6 +30,7 @@ interface SearchedUser {
 export function DirectChatDrawer({ isOpen, onClose, currentUser, triggerToast }: DirectChatDrawerProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<SearchedUser[]>([]);
+  const [allUsersMap, setAllUsersMap] = useState<Map<number, SearchedUser>>(new Map());
   const [allMessages, setAllMessages] = useState<ChatMessage[]>([]);
   const [selectedUser, setSelectedUser] = useState<SearchedUser | null>(null);
   const [newMessage, setNewMessage] = useState("");
@@ -78,8 +79,13 @@ export function DirectChatDrawer({ isOpen, onClose, currentUser, triggerToast }:
           headers: { "Authorization": `Bearer ${currentUser.email}` }
         });
         const data = await res.json();
-        if (data.success) {
-          setSearchResults(data.users || []);
+        if (data.success && data.users) {
+          setSearchResults(data.users);
+          setAllUsersMap(prev => {
+            const next = new Map(prev);
+            data.users.forEach((u: SearchedUser) => next.set(u.id, u));
+            return next;
+          });
         }
       } catch (err) {
         console.error(err);
@@ -95,8 +101,13 @@ export function DirectChatDrawer({ isOpen, onClose, currentUser, triggerToast }:
         }
       });
       const data = await res.json();
-      if (data.success) {
-        setSearchResults(data.users || []);
+      if (data.success && data.users) {
+        setSearchResults(data.users);
+        setAllUsersMap(prev => {
+          const next = new Map(prev);
+          data.users.forEach((u: SearchedUser) => next.set(u.id, u));
+          return next;
+        });
       }
     } catch (err) {
       console.error("Error searching users:", err);
@@ -185,7 +196,6 @@ export function DirectChatDrawer({ isOpen, onClose, currentUser, triggerToast }:
     
     sortedMsg.forEach(m => {
       const partnerId = m.senderId === currentUser.id ? m.receiverId : m.senderId;
-      const partnerName = m.senderId === currentUser.id ? m.receiverName : m.senderName;
       if (!chatPartnersMap.has(partnerId)) {
         chatPartnersMap.set(partnerId, m);
       }
@@ -194,18 +204,23 @@ export function DirectChatDrawer({ isOpen, onClose, currentUser, triggerToast }:
     chatPartnersMap.forEach((msg, partnerId) => {
       const isSender = msg.senderId === currentUser.id;
       const partnerName = isSender ? msg.receiverName : msg.senderName;
+      const known = allUsersMap.get(partnerId);
+      const partnerAvatar = known?.avatarUrl || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100";
+
       activeChatsList.push({
-        user: {
+        user: known || {
           id: partnerId,
           name: partnerName,
           email: "",
-          avatarUrl: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(partnerName)}`,
-          learningStreak: 3
+          avatarUrl: partnerAvatar,
+          learningStreak: 1
         },
         lastMessage: msg
       });
     });
   }
+
+  const activePartnerAvatar = (selectedUser && allUsersMap.get(selectedUser.id)?.avatarUrl) || selectedUser?.avatarUrl || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=100";
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end font-sans">
@@ -278,7 +293,7 @@ export function DirectChatDrawer({ isOpen, onClose, currentUser, triggerToast }:
                     }}
                     className="w-full text-left p-2.5 bg-[#161b22]/70 hover:bg-[#161b22] border border-[#21262d] hover:border-[#ff7b00]/40 rounded-xl transition-all flex items-center gap-2.5 cursor-pointer"
                   >
-                    <img src={user.avatarUrl} alt={user.name} className="w-8 h-8 rounded-full border border-[#30363d]" />
+                    <img src={user.avatarUrl} alt={user.name} className="w-8 h-8 rounded-full border border-[#30363d] object-cover" />
                     <div className="flex-grow min-w-0">
                       <span className="text-xs font-bold text-white block truncate">{user.name}</span>
                       <span className="text-[9px] text-gray-400 flex items-center gap-1 font-mono">
@@ -305,7 +320,7 @@ export function DirectChatDrawer({ isOpen, onClose, currentUser, triggerToast }:
                         : "bg-[#161b22]/40 border-[#21262d] hover:bg-[#161b22] hover:border-[#30363d]"
                     }`}
                   >
-                    <img src={chat.user.avatarUrl} alt={chat.user.name} className="w-8 h-8 rounded-full border border-[#30363d]" />
+                    <img src={chat.user.avatarUrl} alt={chat.user.name} className="w-8 h-8 rounded-full border border-[#30363d] object-cover" />
                     <div className="flex-grow min-w-0">
                       <span className="text-xs font-bold text-white block truncate">{chat.user.name}</span>
                       {chat.lastMessage && (
@@ -334,7 +349,7 @@ export function DirectChatDrawer({ isOpen, onClose, currentUser, triggerToast }:
                 {/* Chat Partner Header info */}
                 <div className="px-4 py-3 bg-[#161b22]/50 border-b border-[#30363d] flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <img src={selectedUser.avatarUrl} alt={selectedUser.name} className="w-8 h-8 rounded-full border border-[#30363d]" />
+                    <img src={activePartnerAvatar} alt={selectedUser.name} className="w-8 h-8 rounded-full border border-[#30363d] object-cover" />
                     <div>
                       <span className="text-xs font-bold text-white block">{selectedUser.name}</span>
                       <span className="text-[9.5px] text-emerald-400 font-mono flex items-center gap-1">
@@ -358,7 +373,7 @@ export function DirectChatDrawer({ isOpen, onClose, currentUser, triggerToast }:
                     return (
                       <div key={msg.id} className={`flex ${isSelf ? "justify-end" : "justify-start"} items-end gap-2`}>
                         {!isSelf && (
-                          <img src={selectedUser.avatarUrl} alt={selectedUser.name} className="w-6 h-6 rounded-full border border-[#21262d] shrink-0 self-start mt-0.5" />
+                          <img src={activePartnerAvatar} alt={selectedUser.name} className="w-6 h-6 rounded-full border border-[#21262d] shrink-0 self-start mt-0.5 object-cover" />
                         )}
                         <div className="space-y-1 max-w-[75%]">
                           <div className={`p-3 rounded-2xl text-xs font-sans leading-relaxed ${
