@@ -2016,22 +2016,24 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
                   )}
 
                   {/* Cart Action Button */}
-                  <button
-                    onClick={() => setShowCartDrawer(true)}
-                    className="bg-[#21262d] border border-[#30363d] hover:border-[#ff7b00] p-2 rounded-lg text-xs text-white transition-colors cursor-pointer flex items-center justify-center shrink-0 relative"
-                    title="Your Shopping Cart"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-slate-200">
-                      <circle cx="9" cy="21" r="1" />
-                      <circle cx="20" cy="21" r="1" />
-                      <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-                    </svg>
-                    {cart.length > 0 && (
-                      <span className="absolute -top-1 -right-1 bg-[#ff7b00] text-white font-extrabold text-[8.5px] min-w-4 h-4 rounded-full flex items-center justify-center px-1 border border-[#0d1117] animate-pulse">
-                        {cart.length}
-                      </span>
-                    )}
-                  </button>
+                  {user?.role !== "ADMIN" && (
+                    <button
+                      onClick={() => setShowCartDrawer(true)}
+                      className="bg-[#21262d] border border-[#30363d] hover:border-[#ff7b00] p-2 rounded-lg text-xs text-white transition-colors cursor-pointer flex items-center justify-center shrink-0 relative"
+                      title="Your Shopping Cart"
+                    >
+                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-slate-200">
+                        <circle cx="9" cy="21" r="1" />
+                        <circle cx="20" cy="21" r="1" />
+                        <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+                      </svg>
+                      {cart.length > 0 && (
+                        <span className="absolute -top-1 -right-1 bg-[#ff7b00] text-white font-extrabold text-[8.5px] min-w-4 h-4 rounded-full flex items-center justify-center px-1 border border-[#0d1117] animate-pulse">
+                          {cart.length}
+                        </span>
+                      )}
+                    </button>
+                  )}
                 </>
               )}
 
@@ -3031,17 +3033,19 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
                           </button>
                         ) : (
                           <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => handleAddToCart(c, "course")}
-                              className="bg-[#21262d] hover:border-[#ff7b00] border border-[#30363d] text-white p-2 rounded-lg transition-colors cursor-pointer flex items-center justify-center shrink-0"
-                              title="Add to Cart"
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-[#ff7b00]">
-                                <circle cx="9" cy="21" r="1" />
-                                <circle cx="20" cy="21" r="1" />
-                                <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-                              </svg>
-                            </button>
+                            {user?.role !== "ADMIN" && (
+                              <button
+                                onClick={() => handleAddToCart(c, "course")}
+                                className="bg-[#21262d] hover:border-[#ff7b00] border border-[#30363d] text-white p-2 rounded-lg transition-colors cursor-pointer flex items-center justify-center shrink-0"
+                                title="Add to Cart"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-[#ff7b00]">
+                                  <circle cx="9" cy="21" r="1" />
+                                  <circle cx="20" cy="21" r="1" />
+                                  <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+                                </svg>
+                              </button>
+                            )}
                             {c.isPremium && !c.hasPremiumAccess ? (
                               <button
                                 onClick={() => handleEnrollCourse(c.id)}
@@ -3171,17 +3175,19 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
                           </button>
                         ) : (
                           <>
-                            <button
-                              onClick={() => handleAddToCart(c, "course")}
-                              className="bg-[#21262d] hover:border-[#ff7b00] border border-[#30363d] text-white p-2 rounded-lg transition-colors cursor-pointer flex items-center justify-center shrink-0"
-                              title="Add to Cart"
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-[#ff7b00]">
-                                <circle cx="9" cy="21" r="1" />
-                                <circle cx="20" cy="21" r="1" />
-                                <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-                              </svg>
-                            </button>
+                            {user?.role !== "ADMIN" && (
+                              <button
+                                onClick={() => handleAddToCart(c, "course")}
+                                className="bg-[#21262d] hover:border-[#ff7b00] border border-[#30363d] text-white p-2 rounded-lg transition-colors cursor-pointer flex items-center justify-center shrink-0"
+                                title="Add to Cart"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-[#ff7b00]">
+                                  <circle cx="9" cy="21" r="1" />
+                                  <circle cx="20" cy="21" r="1" />
+                                  <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+                                </svg>
+                              </button>
+                            )}
                             {c.isPremium && !c.hasPremiumAccess ? (
                               <button
                                 onClick={() => handleEnrollCourse(c.id)}
@@ -3458,17 +3464,19 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
                           </div>
                         ) : (
                           <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => handleAddToCart(pdf, "pdf")}
-                              className="bg-[#21262d] hover:border-[#ff7b00] border border-[#30363d] text-white p-2 rounded-lg transition-colors cursor-pointer flex items-center justify-center shrink-0"
-                              title="Add to Cart"
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-[#ff7b00]">
-                                <circle cx="9" cy="21" r="1" />
-                                <circle cx="20" cy="21" r="1" />
-                                <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-                              </svg>
-                            </button>
+                            {user?.role !== "ADMIN" && (
+                              <button
+                                onClick={() => handleAddToCart(pdf, "pdf")}
+                                className="bg-[#21262d] hover:border-[#ff7b00] border border-[#30363d] text-white p-2 rounded-lg transition-colors cursor-pointer flex items-center justify-center shrink-0"
+                                title="Add to Cart"
+                              >
+                                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-[#ff7b00]">
+                                  <circle cx="9" cy="21" r="1" />
+                                  <circle cx="20" cy="21" r="1" />
+                                  <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+                                </svg>
+                              </button>
+                            )}
                             <button
                               onClick={() => {
                                 setPurchasePdfItem(pdf);

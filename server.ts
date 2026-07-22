@@ -436,6 +436,26 @@ async function persistStateToPostgres(state: DbState) {
       ]);
     }
 
+    // Clean up deleted items from Postgres tables so they don't reappear on refresh
+    if (state.courses?.length > 0) {
+      await pgPool.query("DELETE FROM courses WHERE NOT (id = ANY($1::int[]))", [state.courses.map(c => c.id)]).catch(() => {});
+    }
+    if (state.tutorials?.length > 0) {
+      await pgPool.query("DELETE FROM tutorials WHERE NOT (id = ANY($1::int[]))", [state.tutorials.map(t => t.id)]).catch(() => {});
+    }
+    if (state.pdfs?.length > 0) {
+      await pgPool.query("DELETE FROM pdf_books WHERE NOT (id = ANY($1::int[]))", [state.pdfs.map(p => p.id)]).catch(() => {});
+    }
+    if (state.quizzes?.length > 0) {
+      await pgPool.query("DELETE FROM quizzes WHERE NOT (id = ANY($1::int[]))", [state.quizzes.map(q => q.id)]).catch(() => {});
+    }
+    if (state.challenges?.length > 0) {
+      await pgPool.query("DELETE FROM challenges WHERE NOT (id = ANY($1::int[]))", [state.challenges.map(c => c.id)]).catch(() => {});
+    }
+    if (Array.isArray(state.testimonials) && state.testimonials.length > 0) {
+      await pgPool.query("DELETE FROM testimonials WHERE NOT (id = ANY($1::int[]))", [state.testimonials.map(t => t.id)]).catch(() => {});
+    }
+
     // Enforce sequence reset to the highest ID for all tables
     const seqs = ['courses', 'modules', 'lessons', 'tutorials', 'pdf_books', 'quizzes', 'questions', 'challenges', 'payment_requests', 'transactions', 'notifications', 'course_reviews', 'users', 'pdf_purchases', 'premium_access'];
     for (const tbl of seqs) {

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { User, Course, Tutorial, PdfBook, Quiz, CodingChallenge, Certificate, Announcement, LearningPath } from "../types";
 import TrashManager from "./TrashManager";
 import ContentMediaManager from "./ContentMediaManager";
+import StudentSuccess from "./StudentSuccess";
 import { Users, BookOpen, FileText, Landmark, Award, ShieldAlert, TrendingUp, Settings, Plus, Flame, Sparkles, BookMarked, Eye, Trash, CheckSquare, Clock, Upload, Film, Edit, HelpCircle, Check, MapPin, Megaphone, Star, ChevronRight, CornerDownRight, DollarSign, Zap, Palette } from "lucide-react";
 import { useTheme } from "../utils/ThemeContext";
 import { exportSelectedItemsToPdf } from "../utils/pdfService";
@@ -21,7 +22,7 @@ interface DashboardProps {
   onRefreshData?: () => void;
 }
 
-type AdminTab = "stats" | "courses" | "tutorials" | "pdfs" | "challenges" | "quizzes" | "certificates" | "announcements" | "paths" | "settings" | "purchases" | "trash" | "logs" | "sounds" | "transactions" | "media" | "users" | "messages";
+type AdminTab = "stats" | "courses" | "tutorials" | "pdfs" | "challenges" | "quizzes" | "certificates" | "announcements" | "paths" | "settings" | "purchases" | "trash" | "logs" | "sounds" | "transactions" | "media" | "users" | "messages" | "testimonials";
 
 export default function Dashboard({ user, onViewCertificate, coursesList, onEnrollCourse, t, onUpdateUser, triggerToast, onRefreshData }: DashboardProps) {
   const isAdmin = user.role === "ADMIN";
@@ -1268,25 +1269,108 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
         /* =========================================================================
            SUPER ADMINISTRATIVE CONTENT DASHBOARD
            ========================================================================= */
-        <div className="space-y-6" id="admin-copilot-portal">
+        <div className="flex flex-col lg:flex-row gap-6 items-start" id="admin-copilot-portal">
           
-          {/* Collapsible/Tab navigation rows for Admin panel */}
-          <div className="flex flex-wrap gap-1.5 border-b border-[#30363d] pb-3" id="admin-tabs">
-            {(["stats", "courses", "tutorials", "pdfs", "challenges", "quizzes", "certificates", "announcements", "paths", "settings", "purchases", "sounds", "media", "transactions", "trash", "logs", "users", "messages"] as AdminTab[]).map((tab) => (
-              <button
-                key={tab}
-                onClick={() => { setActiveAdminTab(tab); setFeedback(""); }}
-                className={`py-1.5 px-3.5 rounded-lg text-xs font-bold capitalize transition-all ${
-                  activeAdminTab === tab
-                    ? "bg-[#ff7b00] text-white"
-                    : "bg-[#161b22] text-[#8b949e] hover:text-white border border-[#30363d]"
-                }`}
-                id={`admin-tab-trigger-${tab}`}
-              >
-                {tab === "pdfs" ? "PDF Books" : tab === "paths" ? "Learning Paths" : tab === "trash" ? "Trash Bin" : tab === "logs" ? "Activity Logs" : tab === "purchases" ? "MoMo Purchases" : tab === "sounds" ? "Notification Sounds" : tab === "transactions" ? "Transaction History" : tab === "media" ? "Content Media Manager" : tab === "users" ? "Manage Users" : tab === "messages" ? "Support Messages" : tab}
-              </button>
-            ))}
-          </div>
+          {/* CATEGORIZED VERTICAL SIDEBAR NAVIGATION */}
+          <aside className="w-full lg:w-64 shrink-0 bg-[#161b22] border border-[#30363d] rounded-2xl p-3 shadow-xl space-y-4" id="admin-sidebar">
+            <div className="px-2 pt-1 pb-2 border-b border-[#30363d]">
+              <span className="text-[10px] font-mono font-bold text-[#ff7b00] uppercase tracking-wider block">
+                Admin Control Center
+              </span>
+              <span className="text-xs font-extrabold text-white block mt-0.5">
+                Management Console
+              </span>
+            </div>
+
+            <div className="space-y-3">
+              {[
+                {
+                  category: "Overview & Analytics",
+                  items: [
+                    { id: "stats", label: "Dashboard & Stats", icon: TrendingUp },
+                    { id: "logs", label: "Activity Audit Logs", icon: Clock },
+                  ]
+                },
+                {
+                  category: "Curriculum & Content",
+                  items: [
+                    { id: "courses", label: "Courses Directory", icon: BookOpen, count: adminCourses.length },
+                    { id: "tutorials", label: "Video Tutorials", icon: Film, count: adminTutorials.length },
+                    { id: "pdfs", label: "PDF E-Books", icon: FileText, count: adminPdfs.length },
+                    { id: "paths", label: "Learning Paths", icon: MapPin, count: adminLearningPaths.length },
+                    { id: "testimonials", label: "Student Success Stories", icon: Star },
+                  ]
+                },
+                {
+                  category: "Assessments & Badges",
+                  items: [
+                    { id: "quizzes", label: "Quizzes", icon: CheckSquare, count: adminQuizzes.length },
+                    { id: "challenges", label: "Coding Challenges", icon: Zap, count: adminChallenges.length },
+                    { id: "certificates", label: "Certificates", icon: Award, count: adminCertificates.length },
+                    { id: "announcements", label: "Announcements", icon: Megaphone, count: adminAnnouncements.length },
+                  ]
+                },
+                {
+                  category: "Users, Access & Commerce",
+                  items: [
+                    { id: "users", label: "User Management", icon: Users },
+                    { id: "messages", label: "Support Messages", icon: HelpCircle },
+                    { id: "purchases", label: "MoMo Purchases", icon: DollarSign, count: adminPurchases.filter((p: any) => p.status === "PENDING_APPROVAL").length },
+                    { id: "transactions", label: "Transaction History", icon: Landmark },
+                  ]
+                },
+                {
+                  category: "System & Maintenance",
+                  items: [
+                    { id: "settings", label: "System Settings", icon: Settings },
+                    { id: "media", label: "Media & Assets", icon: Upload },
+                    { id: "sounds", label: "Notification Sounds", icon: Zap },
+                    { id: "trash", label: "Recycle Bin (Trash)", icon: Trash },
+                  ]
+                }
+              ].map((cat, catIdx) => (
+                <div key={catIdx} className="space-y-1">
+                  <span className="px-2 text-[9.5px] font-mono font-bold text-gray-400 uppercase tracking-wider block">
+                    {cat.category}
+                  </span>
+                  <div className="space-y-0.5">
+                    {cat.items.map((item) => {
+                      const Icon = item.icon;
+                      const isActive = activeAdminTab === item.id;
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => { setActiveAdminTab(item.id as AdminTab); setFeedback(""); }}
+                          className={`w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+                            isActive
+                              ? "bg-[#ff7b00] text-white font-bold shadow-md shadow-orange-500/15"
+                              : "text-[#8b949e] hover:text-white hover:bg-[#21262d]"
+                          }`}
+                          id={`admin-nav-${item.id}`}
+                        >
+                          <div className="flex items-center gap-2.5">
+                            <Icon className={`w-4 h-4 shrink-0 ${isActive ? "text-white" : "text-[#ff7b00]"}`} />
+                            <span className="truncate">{item.label}</span>
+                          </div>
+                          {item.count !== undefined && item.count > 0 && (
+                            <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-full ${
+                              isActive ? "bg-black/30 text-white" : "bg-[#21262d] text-gray-300 border border-[#30363d]"
+                            }`}>
+                              {item.count}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </aside>
+
+          {/* MAIN ADMIN WORKSPACE PANEL */}
+          <main className="flex-1 w-full min-w-0 space-y-6">
 
           {/* TAB 1: OVERVIEW METRIC INDICATORS */}
           {activeAdminTab === "stats" && stats && (
@@ -3975,6 +4059,24 @@ export default function Dashboard({ user, onViewCertificate, coursesList, onEnro
             </div>
           )}
 
+          {/* TAB: STUDENT SUCCESS STORIES & ALUMNI PANEL */}
+          {activeAdminTab === "testimonials" && (
+            <div className="bg-[#161b22] border border-[#30363d] p-5 rounded-2xl space-y-4 font-sans animate-fade-in" id="admin-testimonials-tab">
+              <div className="border-b border-[#30363d] pb-3 bg-[#0d1117]/30 p-3 rounded-xl border border-[#21262d] mb-2 flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+                    <span>STUDENT SUCCESS STORIES & ALUMNI MANAGEMENT PANEL</span>
+                  </h4>
+                  <p className="text-[11px] text-gray-400 mt-0.5">Upload student success stories, alumni photos, reviews, career outcomes, and feature alumni on the platform homepage.</p>
+                </div>
+              </div>
+
+              <StudentSuccess user={user} triggerToast={showToast} />
+            </div>
+          )}
+
+          </main>
         </div>
       ) : (
         /* =========================================================================
