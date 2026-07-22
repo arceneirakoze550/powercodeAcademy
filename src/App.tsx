@@ -2423,7 +2423,6 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
             )}
 
             <button onClick={() => { setActiveTab("courses"); setMobileMenuOpen(false); }} className="w-full text-left py-2 hover:text-[#ff7b00]">{t("courses")}</button>
-            <button onClick={() => { setActiveTab("tutorials"); setMobileMenuOpen(false); }} className="w-full text-left py-2 hover:text-[#ff7b00]">{t("tutorials")}</button>
             <button onClick={() => { setActiveTab("pdfs"); setMobileMenuOpen(false); }} className="w-full text-left py-2 hover:text-[#ff7b00]">{t("pdfLibrary")}</button>
             <button onClick={() => { setActiveTab("quizzes"); setMobileMenuOpen(false); }} className="w-full text-left py-2 hover:text-[#ff7b00]">{t("quizzes")}</button>
             <button onClick={() => { setActiveTab("challenges"); setMobileMenuOpen(false); }} className="w-full text-left py-2 hover:text-[#ff7b00]">{t("challenges")}</button>
@@ -2590,7 +2589,6 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
               {[
                 { tab: "landing", label: "Lobby Home", icon: Cpu },
                 { tab: "courses", label: t("courses") || "Courses Directory", icon: BookOpen },
-                { tab: "tutorials", label: t("tutorials") || "Tutorials", icon: FileText },
                 { tab: "pdfs", label: t("pdfLibrary") || "PDF Library", icon: Bookmark },
                 { tab: "quizzes", label: t("quizzes") || "Quizzes", icon: HelpCircle },
                 { tab: "challenges", label: t("challenges") || "Algorithmic Challenges", icon: Terminal },
@@ -3172,145 +3170,6 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
                     </div>
                   </div>
 
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* VIEW: TUTORIAL HANDBOOKS CARDS */}
-        {activeTab === "tutorials" && (
-          <div className="space-y-8" id="view-tutorials">
-            <div className="border-b border-[#30363d] pb-5">
-              <h2 className="text-xl font-bold text-white tracking-tight uppercase">Programming Tutorials Drawer</h2>
-              <p className="text-xs text-gray-500">Quick guides on syntax, structures, modules and algorithms.</p>
-            </div>
-
-            {/* Category selection bar */}
-            <div className="flex flex-wrap gap-2">
-              {tutorialCategories.map((cat) => (
-                <button
-                  key={cat}
-                  onClick={() => setTutorialCategory(cat)}
-                  className={`px-4 py-1.5 rounded-full text-xs font-semibold cursor-pointer border transition-all ${
-                    cat === tutorialCategory
-                      ? "bg-[#ff7b00] border-[#ff7b00] text-white"
-                      : "bg-[#161b22] border-[#30363d] text-gray-300 hover:border-gray-500"
-                  }`}
-                >
-                  {cat === "All" ? "All categories" : cat}
-                </button>
-              ))}
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {filteredTutorials.map((tut) => (
-                <div key={tut.id} className="bg-[#161b22] border border-[#30363d] rounded-2xl p-6 shadow-md flex flex-col justify-between space-y-4 font-sans">
-                  <div className="space-y-4">
-                    <div className="flex justify-between items-start">
-                      <h4 className="text-base font-bold text-white capitalize">{tut.title}</h4>
-                      <span className="text-[10px] bg-[#ff7b00]/10 text-[#ff7b00] font-mono font-bold px-2.5 py-0.5 rounded border border-[#ff7b00]/20">
-                        {tut.category}
-                      </span>
-                    </div>
-
-                    <p className="text-xs text-[#8b949e] leading-relaxed">{tut.content}</p>
-
-                    {tut.embedded_video_url && (
-                      <div className="space-y-3">
-                        <div className="bg-black rounded-xl border border-[#21262d] overflow-hidden shadow-inner relative w-full aspect-video">
-                          {/* PowerCode Brand Watermark */}
-                          <div className="absolute top-3 right-3 bg-black/70 backdrop-blur-sm px-2.5 py-1 rounded text-[9px] font-mono tracking-widest text-[#ff7b00] border border-[#ff7b00]/30 select-none pointer-events-none z-10 font-bold uppercase flex items-center gap-1.5">
-                            <Sparkles className="w-2.5 h-2.5 text-[#ff7b00] animate-pulse" />
-                            <span>PowerCode Academy</span>
-                          </div>
-
-                          {tutorialFallbackActive[tut.id] ? (
-                            <video
-                              src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"
-                              controls
-                              className="absolute inset-0 w-full h-full object-cover"
-                              autoPlay
-                            />
-                          ) : isEmbeddableVideoUrl(tut.embedded_video_url) ? (
-                            <iframe
-                              src={getEmbedUrl(tut.embedded_video_url)}
-                              title={tut.title}
-                              className="absolute inset-0 w-full h-full border-0"
-                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                              allowFullScreen
-                              referrerPolicy="no-referrer"
-                            />
-                          ) : (
-                            <video
-                              src={tut.embedded_video_url}
-                              controls
-                              className="absolute inset-0 w-full h-full"
-                              referrerPolicy="no-referrer"
-                            />
-                          )}
-
-                          {tutorialFallbackActive[tut.id] && (
-                            <div className="absolute bottom-3 left-3 bg-emerald-950/80 backdrop-blur-sm px-2.5 py-1 rounded text-[9px] font-mono text-emerald-400 border border-emerald-500/30 select-none z-10 font-bold uppercase flex items-center gap-1.5">
-                              <span className="w-1.5 h-1.5 bg-emerald-400 rounded-full animate-ping" />
-                              <span>Running Backup Stream</span>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Interactive Bypass and Troubleshooting Actions for Tutorial Video */}
-                        <div className="bg-[#1f242c] p-3 rounded-lg border border-[#30363d]/60 space-y-2">
-                          <p className="text-[10px] text-gray-400 leading-normal flex items-start gap-1.5">
-                            <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
-                            <span>Experiencing YouTube error "(Playback ID: B76wdU4Gy...)"? Sandboxed preview environments can block embeds.</span>
-                          </p>
-                          <div className="flex flex-wrap gap-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setTutorialFallbackActive(prev => ({ ...prev, [tut.id]: !prev[tut.id] }));
-                              }}
-                              className="text-[10px] bg-emerald-600/15 hover:bg-emerald-600 text-emerald-400 hover:text-white px-2.5 py-1 rounded transition-colors font-bold font-mono border border-emerald-500/25 cursor-pointer"
-                            >
-                              {tutorialFallbackActive[tut.id] ? "✕ Reset to Original Stream" : "⚡ Load Backup Stream"}
-                            </button>
-                            <a
-                              href={tut.embedded_video_url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-[10px] bg-blue-600/15 hover:bg-blue-600 text-blue-400 hover:text-white px-2.5 py-1 rounded transition-colors font-bold font-mono border border-blue-500/25 flex items-center gap-1 cursor-pointer"
-                            >
-                              <ExternalLink className="w-3 h-3" />
-                              Watch on YouTube
-                            </a>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {tut.codeSnippet && (
-                      <div className="bg-[#0d1117] rounded-xl border border-[#21262d] overflow-hidden">
-                        <div className="bg-[#1b212c] py-1.5 px-4 text-[10px] font-mono text-gray-400 border-b border-[#21262d]">
-                          Source template:
-                        </div>
-                        <pre className="p-4 text-xs font-mono text-green-400 overflow-x-auto leading-relaxed max-h-44">
-                          <code>{tut.codeSnippet}</code>
-                        </pre>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex justify-between items-center pt-3 border-t border-[#21262d] mt-2">
-                    <span className="text-[10px] text-gray-500 font-mono">DOC REF: TUT-{tut.id}</span>
-                    <button
-                      onClick={() => pdfExportService.downloadTutorial(tut)}
-                      className="flex items-center gap-1.5 text-[11px] text-[#ff7b00] hover:text-white bg-[#ff7b00]/10 hover:bg-[#ff7b00] px-3 py-1.5 rounded-lg font-extrabold border border-[#ff7b00]/20 transition-all cursor-pointer"
-                      type="button"
-                    >
-                      <Download className="w-3.5 h-3.5" />
-                      <span>DOWNLOAD PDF</span>
-                    </button>
-                  </div>
                 </div>
               ))}
             </div>
