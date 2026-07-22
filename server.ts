@@ -437,6 +437,9 @@ async function persistStateToPostgres(state: DbState) {
     }
 
     // Clean up deleted items from Postgres tables so they don't reappear on refresh
+    if (state.users?.length > 0) {
+      await pgPool.query("DELETE FROM users WHERE NOT (id = ANY($1::int[]))", [state.users.map(u => u.id)]).catch(() => {});
+    }
     if (state.courses?.length > 0) {
       await pgPool.query("DELETE FROM courses WHERE NOT (id = ANY($1::int[]))", [state.courses.map(c => c.id)]).catch(() => {});
     }
@@ -454,6 +457,12 @@ async function persistStateToPostgres(state: DbState) {
     }
     if (Array.isArray(state.testimonials) && state.testimonials.length > 0) {
       await pgPool.query("DELETE FROM testimonials WHERE NOT (id = ANY($1::int[]))", [state.testimonials.map(t => t.id)]).catch(() => {});
+    }
+    if (Array.isArray(state.certificates) && state.certificates.length > 0) {
+      await pgPool.query("DELETE FROM certificates WHERE NOT (id = ANY($1::int[]))", [state.certificates.map((c: any) => c.id)]).catch(() => {});
+    }
+    if (Array.isArray(state.announcements) && state.announcements.length > 0) {
+      await pgPool.query("DELETE FROM announcements WHERE NOT (id = ANY($1::int[]))", [state.announcements.map((a: any) => a.id)]).catch(() => {});
     }
 
     // Enforce sequence reset to the highest ID for all tables
