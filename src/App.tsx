@@ -2468,25 +2468,8 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
             
             <div className="h-px bg-[#30363d] my-3" />
             
-            {/* Extremely easy-to-find Signout and Signin Options for Mobile Tray */}
-            {user ? (
-              <div className="py-1">
-                <button
-                  onClick={() => {
-                    setUser(null);
-                    setToken(null);
-                    localStorage.removeItem("powercode_user");
-                    localStorage.removeItem("powercode_token");
-                    setActiveTab("landing");
-                    setMobileMenuOpen(false);
-                  }}
-                  className="w-full bg-[#f85149]/10 hover:bg-[#f85149]/20 text-[#f85149] border border-[#f85149]/30 font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 transition-all uppercase"
-                >
-                  <LogOut className="w-4 h-4 text-[#f85149]" />
-                  <span>Sign Out / Log Out ({user.email})</span>
-                </button>
-              </div>
-            ) : (
+            {/* Signin Options for Mobile Tray if not authenticated */}
+            {!user && (
               <div className="py-1 flex gap-2">
                 <button
                   onClick={() => { setShowLogin(true); setMobileMenuOpen(false); }}
@@ -4981,12 +4964,12 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
       {/* PDF PAYMENT MODAL: MOBILE MONEY PAYMENT AND PROOF SUBMISSION */}
       {purchasePdfItem && user && (
         <div className="fixed inset-0 min-h-screen bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 animate-fade-in" id="momo-payment-modal">
-          <div className="bg-[#161b22] border border-[#ff7b00]/30 rounded-2xl w-full max-w-lg shadow-2xl relative max-h-[92vh] overflow-y-auto flex flex-col">
+          <div className="bg-[#161b22] border border-[#ff7b00]/30 rounded-2xl w-full max-w-md shadow-2xl relative max-h-[82vh] overflow-y-auto flex flex-col">
             
             {/* Header border flash */}
             <div className="h-1 w-full bg-gradient-to-r from-yellow-500 via-orange-500 to-red-500"></div>
             
-            <div className="p-6 space-y-5">
+            <div className="p-4 sm:p-5 space-y-3.5">
               <div className="flex justify-between items-start">
                 <div>
                   <span className="text-[10px] font-mono font-bold tracking-wider uppercase text-[#ff7b00] bg-[#ff7b00]/10 border border-[#ff7b00]/20 px-2.5 py-0.5 rounded">
@@ -5270,12 +5253,12 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
       {/* COURSE PAYMENT MODAL: MOBILE MONEY PAYMENT AND PROOF SUBMISSION */}
       {purchaseCourseItem && user && (
         <div className="fixed inset-0 min-h-screen bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 animate-fade-in" id="course-momo-payment-modal">
-          <div className="bg-[#161b22] border border-[#ff7b00]/30 rounded-2xl w-full max-w-lg shadow-2xl relative max-h-[92vh] overflow-y-auto flex flex-col">
+          <div className="bg-[#161b22] border border-[#ff7b00]/30 rounded-2xl w-full max-w-md shadow-2xl relative max-h-[82vh] overflow-y-auto flex flex-col">
             
             {/* Header border flash */}
             <div className="h-1 w-full bg-gradient-to-r from-yellow-500 via-orange-500 to-red-500"></div>
             
-            <div className="p-6 space-y-5">
+            <div className="p-4 sm:p-5 space-y-3.5">
               <div className="flex justify-between items-start">
                 <div>
                   <span className="text-[10px] font-mono font-bold tracking-wider uppercase text-[#ff7b00] bg-[#ff7b00]/10 border border-[#ff7b00]/20 px-2.5 py-0.5 rounded">
@@ -5601,12 +5584,12 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
       {/* UPGRADE TO PRO MODAL */}
       {showProModal && user && (
         <div className="fixed inset-0 min-h-screen bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-3 animate-fade-in" id="pro-upgrade-modal">
-          <div className="bg-[#161b22] border border-amber-500/30 rounded-2xl w-full max-w-lg shadow-2xl relative overflow-hidden flex flex-col">
+          <div className="bg-[#161b22] border border-amber-500/30 rounded-2xl w-full max-w-md shadow-2xl relative max-h-[82vh] overflow-y-auto flex flex-col">
             
             {/* Header border flash */}
             <div className="h-1 w-full bg-gradient-to-r from-amber-500 via-yellow-500 to-orange-500"></div>
             
-            <div className="p-6 space-y-5">
+            <div className="p-4 sm:p-5 space-y-3.5">
               <div className="flex justify-between items-start">
                 <div>
                   <span className="text-[10px] font-mono font-bold tracking-wider uppercase text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 rounded flex items-center gap-1.5 w-fit">

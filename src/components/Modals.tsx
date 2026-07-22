@@ -38,9 +38,7 @@ export function LoginModal({ onClose, onSuccess, t }: LoginModalProps) {
       } else {
         onSuccess(data.token, data.user);
         onClose();
-        setTimeout(() => {
-          window.hidePowerCodeLoader?.();
-        }, 800);
+        window.hidePowerCodeLoader?.();
       }
     } catch (err: any) {
       setErrorFeedback(`Driver connection error: ${err.message || err}`);
@@ -156,9 +154,7 @@ export function RegisterModal({ onClose, onSuccess, t }: RegisterModalProps) {
       } else {
         onSuccess(data.token, data.user);
         onClose();
-        setTimeout(() => {
-          window.hidePowerCodeLoader?.();
-        }, 800);
+        window.hidePowerCodeLoader?.();
       }
     } catch (err: any) {
       setFeedback(`Driver register failure: ${err.message || err}`);

@@ -2036,31 +2036,34 @@ function getDB(): DbState {
   return dbCachedInstance;
 }
 
+let saveDbWriteTimeout: any = null;
+
 function saveDB(state: DbState): void {
   try {
     dbCachedInstance = state;
     
-    // Always write to local JSON file for offline/local desktop resilience
-    try {
-      fs.writeFileSync(DB_FILE, JSON.stringify(state, null, 2), "utf8");
-    } catch (fsErr: any) {
-      console.error("[Database Save] Failed to write db_state.json locally:", fsErr);
+    // Non-blocking debounced asynchronous disk write
+    if (!saveDbWriteTimeout) {
+      saveDbWriteTimeout = setTimeout(() => {
+        saveDbWriteTimeout = null;
+        if (dbCachedInstance) {
+          fs.writeFile(DB_FILE, JSON.stringify(dbCachedInstance), "utf8", (fsErr) => {
+            if (fsErr) {
+              console.error("[Database Save] Async write error:", fsErr);
+            }
+          });
+        }
+      }, 150);
     }
     
     // Enforce instant background persistence directly to Neon PostgreSQL. 
     if (pgPool && pgConnectedStatus) {
       persistStateToPostgres(state).catch((err) => {
         console.error("[Database Sync] Error persisting state to Neon PostgreSQL:", err);
-        try {
-          fs.appendFileSync(path.join(process.cwd(), "sync_error.log"), `[saveDB.catch] ${err?.message}\n${err?.stack}\n\n`);
-        } catch (e) {}
       });
     }
   } catch (err: any) {
     console.error("[Database Sync] Critical state save failure:", err);
-    try {
-      fs.appendFileSync(path.join(process.cwd(), "sync_error.log"), `[saveDB.throw] ${err?.message}\n${err?.stack}\n\n`);
-    } catch (e) {}
   }
 }
 
