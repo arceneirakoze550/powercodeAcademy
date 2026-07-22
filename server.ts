@@ -1454,6 +1454,20 @@ interface DbState {
     message: string;
     createdAt: string;
   }[];
+  testimonials?: {
+    id: number;
+    name: string;
+    role: string;
+    company: string;
+    avatarUrl: string;
+    blurb: string;
+    highlightPhrase: string;
+    stats: { label: string; value: string }[];
+    tags: string[];
+    isApproved?: boolean;
+    createdAt?: string;
+    createdByUserId?: number;
+  }[];
 }
 
 const defaultInitialState: DbState = {
@@ -1786,7 +1800,77 @@ const defaultInitialState: DbState = {
   notificationLogs: [],
   pushTokens: [],
   notificationSounds: [],
-  supportMessages: []
+  supportMessages: [],
+  testimonials: [
+    {
+      id: 1,
+      name: "Sarah Jenkins",
+      role: "Software Engineer II",
+      company: "Google",
+      avatarUrl: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&h=150&fit=crop",
+      blurb: "PowerCode Academy completely redefined my learning curve. The interactive browser-based compiler and immediate feedback from the Gemini AI Mentor felt like having a senior engineer sitting right next to me. I transitioned from retail management into a core engineering team at Google in less than 9 months!",
+      highlightPhrase: "Went from absolute beginner to a Core Engineer at Google in 9 months.",
+      stats: [
+        { label: "Salary Increase", value: "+140%" },
+        { label: "Time to Hire", value: "9 Months" },
+        { label: "Lessons Finished", value: "142 Modules" }
+      ],
+      tags: ["Python AI", "Node.js Backend", "Monaco IDE Sandbox"],
+      isApproved: true,
+      createdAt: new Date().toISOString()
+    },
+    {
+      id: 2,
+      name: "Alex Rivera",
+      role: "Full-Stack Developer",
+      company: "Stripe",
+      avatarUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop",
+      blurb: "The certification program at PowerCode was the first credential that actually carried weight in my interviews. Employers were incredibly impressed with the physical verified QR links pointing back to my real compiled code sandboxes. I was hired at Stripe within two weeks of receiving my backend certificate!",
+      highlightPhrase: "My verified portfolio sandbox landed me an offer at Stripe.",
+      stats: [
+        { label: "Interviews Booked", value: "8 callbacks" },
+        { label: "Starting Role", value: "L4 Engineer" },
+        { label: "Compiler Commits", value: "480+ runs" }
+      ],
+      tags: ["TypeScript", "PostgreSQL Joins", "Verified Credentials"],
+      isApproved: true,
+      createdAt: new Date().toISOString()
+    },
+    {
+      id: 3,
+      name: "Mia Chen",
+      role: "Frontend Team Lead",
+      company: "Netflix",
+      avatarUrl: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=150&fit=crop",
+      blurb: "I had some basic self-taught experience, but I lacked structured engineering foundations. PowerCode's deep-dives into CSS Box layouts, responsive flex grids, and advanced JavaScript asynchronous promises connected all the dots. Now I lead a team of frontend engineers building global components.",
+      highlightPhrase: "Connected the dots to scale my knowledge to a Team Lead position.",
+      stats: [
+        { label: "Team Managed", value: "6 Engineers" },
+        { label: "Promo Cycle", value: "1 Year" },
+        { label: "Syllabus Mastery", value: "100%" }
+      ],
+      tags: ["Responsive Design", "Advanced JS", "CSS Box Masterclass"],
+      isApproved: true,
+      createdAt: new Date().toISOString()
+    },
+    {
+      id: 4,
+      name: "Marcus Vance",
+      role: "DevOps Architect",
+      company: "AWS Partner Network",
+      avatarUrl: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&h=150&fit=crop",
+      blurb: "The API engineering modules are peerless. Setting up Express controllers, routing pipelines, middleware authenticators, and relational schemas on the live database was identical to my daily tasks now. It's not just a course; it's a simulated high-throughput production environment.",
+      highlightPhrase: "Learned server-side clustering that perfectly mirrors production.",
+      stats: [
+        { label: "Compiles Done", value: "1,200+" },
+        { label: "Placement", value: "AWS Partner" },
+        { label: "Tech Stack Size", value: "12 Tools" }
+      ],
+      tags: ["Node.js Servers", "REST API Schema", "Relational DB"],
+      isApproved: true,
+      createdAt: new Date().toISOString()
+    }
+  ]
 };
 
 // State Helper Functions
@@ -1833,7 +1917,8 @@ function ensureDbSanitized(parsed: any): DbState {
     "notificationLogs",
     "pushTokens",
     "notificationSounds",
-    "supportMessages"
+    "supportMessages",
+    "testimonials"
   ];
 
   arrayKeys.forEach((key) => {
@@ -3750,6 +3835,119 @@ app.delete("/api/quizzes/:id", (req, res) => {
 
   saveDB(db);
   res.json({ success: true, message: permanent ? "Quiz permanently deleted" : "Quiz moved to trash" });
+});
+
+// GET & POST & PUT & DELETE TESTIMONIALS (STUDENT SUCCESS STORIES)
+app.get("/api/testimonials", (req, res) => {
+  const db = getDB();
+  if (!db.testimonials || db.testimonials.length === 0) {
+    db.testimonials = defaultInitialState.testimonials || [];
+    saveDB(db);
+  }
+  res.json({ testimonials: db.testimonials });
+});
+
+app.post("/api/testimonials", (req, res) => {
+  const user = parseUserFromAuth(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+
+  const { name, role, company, avatarUrl, blurb, highlightPhrase, stats, tags } = req.body;
+  if (!name || !role || !blurb) {
+    return res.status(400).json({ error: "Name, role, and testimonial content are required" });
+  }
+
+  const db = getDB();
+  if (!db.testimonials) db.testimonials = [];
+
+  const nextId = db.testimonials.length ? Math.max(...db.testimonials.map(t => t.id)) + 1 : 1;
+
+  const newTestimonial = {
+    id: nextId,
+    name,
+    role,
+    company: company || "Freelancer",
+    avatarUrl: avatarUrl || "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150",
+    blurb,
+    highlightPhrase: highlightPhrase || `Joined as student, now thriving as ${role}`,
+    stats: Array.isArray(stats) ? stats : [
+      { label: "Salary Increase", value: "+50%" },
+      { label: "Time to Hire", value: "3 Months" },
+      { label: "Mastered Tags", value: `${(tags || []).length || 2} Skills` }
+    ],
+    tags: Array.isArray(tags) ? tags : ["Graduate"],
+    isApproved: true,
+    createdAt: new Date().toISOString(),
+    createdByUserId: user.id
+  };
+
+  db.testimonials.push(newTestimonial);
+  saveDB(db);
+  res.json({ success: true, testimonial: newTestimonial });
+});
+
+app.put("/api/testimonials/:id", (req, res) => {
+  const user = parseUserFromAuth(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+
+  const id = Number(req.params.id);
+  const db = getDB();
+  if (!db.testimonials) db.testimonials = [];
+
+  const idx = db.testimonials.findIndex(t => t.id === id);
+  if (idx === -1) {
+    return res.status(404).json({ error: "Testimonial not found" });
+  }
+
+  const testimonial = db.testimonials[idx];
+  const isCreator = testimonial.createdByUserId === user.id;
+  const isAdmin = user.role === "ADMIN";
+
+  if (!isAdmin && !isCreator) {
+    return res.status(403).json({ error: "Permission denied" });
+  }
+
+  const { name, role, company, avatarUrl, blurb, highlightPhrase, stats, tags } = req.body;
+
+  db.testimonials[idx] = {
+    ...testimonial,
+    name: name !== undefined ? name : testimonial.name,
+    role: role !== undefined ? role : testimonial.role,
+    company: company !== undefined ? company : testimonial.company,
+    avatarUrl: avatarUrl !== undefined ? avatarUrl : testimonial.avatarUrl,
+    blurb: blurb !== undefined ? blurb : testimonial.blurb,
+    highlightPhrase: highlightPhrase !== undefined ? highlightPhrase : testimonial.highlightPhrase,
+    stats: stats !== undefined ? stats : testimonial.stats,
+    tags: tags !== undefined ? tags : testimonial.tags
+  };
+
+  saveDB(db);
+  res.json({ success: true, testimonial: db.testimonials[idx] });
+});
+
+app.delete("/api/testimonials/:id", (req, res) => {
+  const user = parseUserFromAuth(req);
+  if (!user) return res.status(401).json({ error: "Unauthorized" });
+
+  const id = Number(req.params.id);
+  const db = getDB();
+  if (!db.testimonials) db.testimonials = [];
+
+  const idx = db.testimonials.findIndex(t => t.id === id);
+  if (idx === -1) {
+    return res.status(404).json({ error: "Testimonial not found" });
+  }
+
+  const testimonial = db.testimonials[idx];
+  const isCreator = testimonial.createdByUserId === user.id;
+  const isAdmin = user.role === "ADMIN";
+
+  if (!isAdmin && !isCreator) {
+    return res.status(403).json({ error: "Permission denied" });
+  }
+
+  db.testimonials.splice(idx, 1);
+  saveDB(db);
+  res.json({ success: true, message: "Testimonial deleted successfully" });
 });
 
 // GET & POST ANNOUNCEMENTS
