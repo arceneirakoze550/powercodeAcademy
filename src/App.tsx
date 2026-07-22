@@ -2749,50 +2749,74 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
               </div>
             )}
 
-            {/* OFFLINE SIMULATION/ACTUAL NOTIFICATION BANNER & MINI GAME */}
-            {(isOfflineSimulated || isActualOffline) && (
-              <div className="mb-6 p-4 bg-orange-500/15 border border-orange-500/35 rounded-2xl flex flex-col gap-4 text-xs leading-relaxed shadow-lg">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                  <div>
-                    <h4 className="font-bold text-orange-500 uppercase flex items-center gap-1.5 text-sm">
-                      <WifiOff className="w-4 h-4 text-orange-500 shrink-0" />
-                      <span>{isActualOffline ? "Real Network Offline Detected!" : "Intermittent Offline Connection Simulated"}</span>
-                    </h4>
-                    <p className="text-gray-300 mt-1">
-                      {isActualOffline 
-                        ? "Your browser reports that you are currently disconnected from the Internet. We have activated local offline mode. Tap below to play Byte Catcher!" 
-                        : "You are simulating an offline connection to test caching. Previously opened courses and cached reference PDFs will remain accessible."}
+            {/* OFFLINE MODE: ONLY GAME AND RECONNECT CONTROLS VISIBLE (ACADEMY UI HIDDEN) */}
+            {(isOfflineSimulated || isActualOffline) ? (
+              <div className="py-6 sm:py-10 px-2 sm:px-4 max-w-4xl mx-auto space-y-8" id="offline-arcade-viewport">
+                
+                {/* HIGH IMPACT OFFLINE ALERT & CONTROL CARD */}
+                <div className="bg-[#161b22] border-2 border-[#ff7b00]/50 rounded-3xl p-6 sm:p-10 text-center space-y-6 shadow-2xl relative overflow-hidden">
+                  <div className="absolute top-0 right-0 w-80 h-80 bg-[#ff7b00]/15 rounded-full blur-[100px] pointer-events-none" />
+                  
+                  <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-orange-500/20 border border-orange-500/40 text-orange-400 font-mono text-xs uppercase tracking-wider font-bold">
+                    <WifiOff className="w-4 h-4 text-orange-500 animate-pulse shrink-0" />
+                    <span>{isActualOffline ? "Real Network Offline Detected" : "Offline Simulation Mode Active"}</span>
+                  </div>
+
+                  <div className="space-y-3 max-w-2xl mx-auto">
+                    <h2 className="text-2xl sm:text-4xl font-extrabold text-white font-sans tracking-tight">
+                      PowerCode Arcade: Byte Catcher 🎮
+                    </h2>
+                    <p className="text-xs sm:text-sm text-[#8b949e] leading-relaxed">
+                      {isActualOffline
+                        ? "You are currently disconnected from the Internet. All PowerCode Academy course content and tabs are hidden while offline. Enjoy catching bugs and compiling code in Byte Catcher until your connection is restored!"
+                        : "Offline simulation is currently active. All PowerCode Academy curriculum content is hidden during offline mode. Catch bytes below or click to disable simulation and restore the online UI."}
                     </p>
                   </div>
-                  <div className="flex flex-wrap gap-2.5">
-                    <button
-                      type="button"
-                      onClick={() => setShowOfflineGame(!showOfflineGame)}
-                      className="bg-[#21262d] hover:bg-[#30363d] text-white border border-[#30363d] font-bold py-2 px-4 rounded-xl transition-all cursor-pointer text-xs"
-                    >
-                      {showOfflineGame ? "Hide Byte Catcher 🎮" : "Play Byte Catcher 🎮"}
-                    </button>
+
+                  <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
                     {isOfflineSimulated && (
                       <button
                         type="button"
-                        onClick={() => setIsOfflineSimulated(false)}
-                        className="bg-[#ff7b00] hover:bg-[#e66f00] text-white font-bold py-2 px-4 rounded-xl transition-all cursor-pointer text-xs shrink-0"
+                        onClick={() => {
+                          setIsOfflineSimulated(false);
+                          localStorage.setItem("powercode_offline_sim", "false");
+                        }}
+                        className="bg-[#ff7b00] hover:bg-[#e66f00] text-white font-extrabold py-3.5 px-7 rounded-xl transition-all shadow-xl shadow-orange-500/25 cursor-pointer text-xs flex items-center gap-2 active:scale-95"
                       >
-                        Disable Sim & Go Online
+                        <Wifi className="w-4.5 h-4.5 text-white" />
+                        <span>Disable Offline Sim & Restore Online UI</span>
+                      </button>
+                    )}
+
+                    {isActualOffline && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const onlineNow = navigator.onLine;
+                          setIsActualOffline(!onlineNow);
+                          if (onlineNow) {
+                            triggerToast("Network connection restored! 🌐", "success");
+                          } else {
+                            triggerToast("Still offline. Please check your Internet connection.", "warning");
+                          }
+                        }}
+                        className="bg-[#21262d] hover:bg-[#30363d] text-white border border-[#30363d] font-bold py-3.5 px-7 rounded-xl transition-all cursor-pointer text-xs flex items-center gap-2 active:scale-95"
+                      >
+                        <Wifi className="w-4.5 h-4.5 text-emerald-400" />
+                        <span>Check Connection Status</span>
                       </button>
                     )}
                   </div>
                 </div>
 
-                {showOfflineGame && (
-                  <div className="flex flex-col items-center justify-center pt-2 border-t border-[#30363d]/40">
-                    <ByteCatcherGame />
-                  </div>
-                )}
+                {/* GAME CANVAS */}
+                <div className="flex justify-center pt-2">
+                  <ByteCatcherGame />
+                </div>
               </div>
-            )}
-        
-        {/* VIEW: LANDING HOME LOBBY */}
+            ) : (
+              <>
+                {/* VIEW: LANDING HOME LOBBY */}
         {activeTab === "landing" && (
           <div className="space-y-16" id="view-landing">
             
@@ -4466,13 +4490,17 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
           </div>
         )}
 
+              </>
+            )}
+
       </main>
 
         </div> {/* End of of MAIN VIEWPORT LAYOUT WRAPPER (flex-col min-w-0) */}
       </div> {/* End of DUAL COLUMN MULTI-MODULE BODY WORKSPACE */}
 
-      {/* 4. WEB SITE FOOTER */}
-      <footer className="bg-[#0b0d11] border-t border-[#30363d] text-xs py-10 text-[#8b949e]" id="global-footer">
+      {/* 4. WEB SITE FOOTER (Hidden when offline so only the arcade game is visible) */}
+      {!isOfflineSimulated && !isActualOffline && (
+        <footer className="bg-[#0b0d11] border-t border-[#30363d] text-xs py-10 text-[#8b949e]" id="global-footer">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
             {/* Branding Column */}
@@ -4548,6 +4576,7 @@ Developer & Alumni Support: arceneirakoze550@gmail.com
           </div>
         </div>
       </footer>
+      )}
 
       {/* FLOATING WHATSAPP (Bottom Left) */}
       <div className="fixed bottom-6 left-6 z-40">
